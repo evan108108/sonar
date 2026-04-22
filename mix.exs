@@ -64,9 +64,55 @@ defmodule Sonar.MixProject do
     [
       sonar: [
         include_executables_for: [:unix],
-        applications: [runtime_tools: :permanent]
+        applications: [runtime_tools: :permanent],
+        steps: [:assemble, &copy_plugin_manifest/1, :tar, &repack_with_manifest/1]
       ]
     ]
+  end
+
+  # Copy sonar.plugin.json into the release root. Mix's built-in :tar step
+  # archives only bin/erts-*/lib/releases, so loose files here are ignored —
+  # the post-tar repack step is what actually ships the manifest.
+  defp copy_plugin_manifest(release) do
+    source = Path.expand("sonar.plugin.json", __DIR__)
+    dest = Path.join(release.path, "sonar.plugin.json")
+    File.cp!(source, dest)
+    release
+  end
+
+  # Repack the release tarball so it includes sonar.plugin.json at the root.
+  # Sonata's PluginManager expects to find `<name>.plugin.json` at the tarball
+  # root when installing. Runs after :tar — overwrites the same tarball path.
+  defp repack_with_manifest(release) do
+    # release.path is _build/<env>/rel/<name>; the tar lives at _build/<env>/<name>-<version>.tar.gz
+    tar_path =
+      Path.join(
+        Path.dirname(Path.dirname(release.path)),
+        "#{release.name}-#{release.version}.tar.gz"
+      )
+
+    unless File.exists?(tar_path) do
+      raise "repack_with_manifest: expected tarball at #{tar_path}"
+    end
+
+    # Extract to a temp dir, add the manifest at the root, repack.
+    tmp = Path.join(System.tmp_dir!(), "sonar-plugin-repack-#{:os.system_time(:millisecond)}")
+    File.mkdir_p!(tmp)
+
+    try do
+      {_, 0} = System.cmd("tar", ["xzf", tar_path, "-C", tmp])
+      File.cp!(Path.expand("sonar.plugin.json", __DIR__), Path.join(tmp, "sonar.plugin.json"))
+
+      entries =
+        File.ls!(tmp)
+        |> Enum.sort()
+
+      {_, 0} = System.cmd("tar", ["czf", tar_path] ++ Enum.flat_map(entries, &["-C", tmp, &1]))
+    after
+      File.rm_rf!(tmp)
+    end
+
+    release
   end
 
   defp aliases do
