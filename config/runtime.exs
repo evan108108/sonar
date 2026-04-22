@@ -6,7 +6,8 @@ if System.get_env("PHX_SERVER") || config_env() == :prod do
 end
 
 # Port config — defaults to 4000
-config :sonar, SonarWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+port = String.to_integer(System.get_env("PORT", "4000"))
+config :sonar, SonarWeb.Endpoint, http: [port: port]
 
 # DB path — plugin data dir takes precedence, then SONAR_DB, then default
 # Skip in test env — test.exs sets the sandboxed DB path
@@ -30,6 +31,6 @@ if config_env() == :prod do
   bind_ip = if System.get_env("SONAR_DISCOVERY") == "true", do: {0, 0, 0, 0}, else: {127, 0, 0, 1}
 
   config :sonar, SonarWeb.Endpoint,
-    http: [ip: bind_ip],
+    http: [ip: bind_ip, port: port],
     secret_key_base: secret_key_base
 end
