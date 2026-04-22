@@ -129,6 +129,7 @@ defmodule SonarWeb.MessagesController do
       answer: message.answer,
       status: message.status,
       expires_at: message.expires_at,
+      remote_message_id: message.remote_message_id,
       answered_at: message.answered_at,
       inserted_at: message.inserted_at
     }
