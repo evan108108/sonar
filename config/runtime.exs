@@ -26,7 +26,10 @@ if config_env() == :prod do
     System.get_env("SECRET_KEY_BASE") ||
       :crypto.strong_rand_bytes(64) |> Base.encode64()
 
+  # Bind to 0.0.0.0 when discovery is enabled (peer-to-peer needs network access)
+  bind_ip = if System.get_env("SONAR_DISCOVERY") == "true", do: {0, 0, 0, 0}, else: {127, 0, 0, 1}
+
   config :sonar, SonarWeb.Endpoint,
-    http: [ip: {127, 0, 0, 1}],
+    http: [ip: bind_ip],
     secret_key_base: secret_key_base
 end
