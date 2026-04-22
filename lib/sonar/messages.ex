@@ -160,23 +160,12 @@ defmodule Sonar.Messages do
   end
 
   defp http_post(url, body) do
-    uri = URI.parse(url)
-    host = String.to_charlist(uri.host || "127.0.0.1")
-    port = uri.port || 80
-    path = uri.path || "/"
-
-    case :gen_tcp.connect(host, port, [:binary, active: false], 5_000) do
-      {:ok, socket} ->
-        request = "POST #{path} HTTP/1.1\r\nHost: #{uri.host}:#{port}\r\nContent-Type: application/json\r\nContent-Length: #{byte_size(body)}\r\nConnection: close\r\n\r\n#{body}"
-        :gen_tcp.send(socket, request)
-        result = :gen_tcp.recv(socket, 0, 10_000)
-        :gen_tcp.close(socket)
-        case result do
-          {:ok, response} ->
-            if String.contains?(response, "200") or String.contains?(response, "201"), do: :ok, else: {:error, response}
-          error -> error
-        end
-      error -> error
+    case System.cmd("curl", ["-s", "--max-time", "10", "-X", "POST", "-H", "Content-Type: application/json", "-d", body, "-w", "\n%{http_code}", url], stderr_to_stdout: true) do
+      {output, 0} ->
+        status = output |> String.trim() |> String.split("\n") |> List.last()
+        if status in ["200", "201"], do: :ok, else: {:error, output}
+      {output, code} ->
+        {:error, "curl exit #{code}: #{output}"}
     end
   end
 
