@@ -28,4 +28,11 @@ defmodule SonarWeb.Router do
     post "/messages/send", MessagesController, :send_message
     post "/messages/:id/reply", MessagesController, :reply
   end
+
+  # Public discovery endpoint — how peers find out what this instance can do
+  scope "/", SonarWeb do
+    pipe_through :api
+
+    get "/.well-known/sonar/card.json", ServerCardController, :show
+  end
 end
