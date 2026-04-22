@@ -75,7 +75,8 @@ defmodule SonarWeb.MessagesController do
       peer ->
         attrs = Map.merge(message_attrs, %{
           "id" => gen_id(),
-          "peer_id" => peer.id
+          "peer_id" => peer.id,
+          "remote_message_id" => message_attrs["message_id"]
         })
 
         case Messages.receive_message(attrs) do
@@ -94,18 +95,20 @@ defmodule SonarWeb.MessagesController do
   end
 
   # HTTP peer-to-peer response delivery
+  # Uses update_answer directly (not reply/2) to avoid re-relaying the response back
   def receive_response(conn, %{"from_instance_id" => _from_instance_id, "message_id" => message_id, "answer" => answer}) do
     case Messages.get(message_id) do
       nil ->
         conn |> put_status(404) |> json(%{error: "Message not found"})
 
       message ->
-        case Messages.reply(message, answer) do
+        case Messages.update_answer(message_id, answer) do
           {:ok, _updated} ->
+            SonarWeb.Endpoint.broadcast("messages:events", "reply_received", %{message_id: message_id, answer: answer})
             json(conn, %{ok: true})
 
-          {:error, changeset} ->
-            conn |> put_status(422) |> json(%{error: format_errors(changeset)})
+          {:error, reason} ->
+            conn |> put_status(422) |> json(%{error: inspect(reason)})
         end
     end
   end

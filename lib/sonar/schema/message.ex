@@ -12,6 +12,7 @@ defmodule Sonar.Schema.Message do
     field(:status, :string, default: "pending")
     field(:expires_at, :utc_datetime)
     field(:callback_url, :string)
+    field(:remote_message_id, :string)
     field(:answered_at, :utc_datetime)
 
     belongs_to(:peer, Sonar.Schema.Peer, type: :string)
@@ -31,6 +32,7 @@ defmodule Sonar.Schema.Message do
       :status,
       :expires_at,
       :callback_url,
+      :remote_message_id,
       :answered_at
     ])
     |> validate_required([:id, :question])

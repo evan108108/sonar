@@ -69,6 +69,16 @@ defmodule Sonar.Messages do
     end
   end
 
+  def update_answer(message_id, answer) do
+    case get(message_id) do
+      nil -> {:error, :not_found}
+      message ->
+        message
+        |> Message.changeset(%{"answer" => answer, "status" => "answered", "answered_at" => DateTime.utc_now()})
+        |> Repo.update()
+    end
+  end
+
   def receive_message(attrs) do
     %Message{}
     |> Message.changeset(Map.merge(attrs, %{"direction" => "inbound", "status" => "pending"}))
@@ -101,8 +111,10 @@ defmodule Sonar.Messages do
 
   defp maybe_relay_response(message) do
     if message.peer_id != nil && message.answer != nil do
+      # Use remote_message_id if available (the sender's original message ID)
+      response_to = message.remote_message_id || message.id
       payload = %{
-        "response_to" => message.id,
+        "response_to" => response_to,
         "answer" => message.answer
       }
 
@@ -116,7 +128,7 @@ defmodule Sonar.Messages do
           false
         end
 
-      unless relayed, do: http_relay_response(message.peer_id, message.id, message.answer)
+      unless relayed, do: http_relay_response(message.peer_id, response_to, message.answer)
     end
   end
 
