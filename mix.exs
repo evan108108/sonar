@@ -8,6 +8,7 @@ defmodule Sonar.MixProject do
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      releases: releases(),
       aliases: aliases(),
       deps: deps(),
       listeners: [Phoenix.CodeReloader]
@@ -59,6 +60,15 @@ defmodule Sonar.MixProject do
   #     $ mix setup
   #
   # See the documentation for `Mix` for more info on aliases.
+  defp releases do
+    [
+      sonar: [
+        include_executables_for: [:unix],
+        applications: [runtime_tools: :permanent]
+      ]
+    ]
+  end
+
   defp aliases do
     [
       setup: ["deps.get"],

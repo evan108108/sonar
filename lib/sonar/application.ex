@@ -7,10 +7,12 @@ defmodule Sonar.Application do
   def start(_type, _args) do
     maybe_start_distribution()
 
+    # Auto-migrate on startup (safe for SQLite, idempotent)
     children =
       [
         SonarWeb.Telemetry,
         Sonar.Repo,
+        {Sonar.Migrator, []},
         {DNSCluster, query: Application.get_env(:sonar, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Sonar.PubSub},
         Sonar.Identity,
