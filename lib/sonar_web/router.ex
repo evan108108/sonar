@@ -44,6 +44,10 @@ defmodule SonarWeb.Router do
     get "/messages/:id", MessagesController, :show
     post "/messages/send", MessagesController, :send_message
     post "/messages/:id/reply", MessagesController, :reply
+
+    # Peer-to-peer HTTP message delivery (fallback when Erlang distribution isn't available)
+    post "/messages/receive", MessagesController, :receive_message
+    post "/messages/receive_response", MessagesController, :receive_response
   end
 
   # Peer-facing public endpoints (no auth) — capability discovery

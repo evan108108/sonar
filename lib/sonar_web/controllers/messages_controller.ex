@@ -66,6 +66,56 @@ defmodule SonarWeb.MessagesController do
     end
   end
 
+  # HTTP peer-to-peer message delivery (same as Erlang relay but via HTTP)
+  def receive_message(conn, %{"from_instance_id" => from_instance_id, "message" => message_attrs}) do
+    case Sonar.Peers.find_by_instance_id(from_instance_id) do
+      nil ->
+        conn |> put_status(404) |> json(%{error: "Unknown sender instance"})
+
+      peer ->
+        attrs = Map.merge(message_attrs, %{
+          "id" => gen_id(),
+          "peer_id" => peer.id
+        })
+
+        case Messages.receive_message(attrs) do
+          {:ok, msg} ->
+            SonarWeb.Endpoint.broadcast("messages:events", "new_message", %{message_id: msg.id, from_peer: from_instance_id, question: msg.question, direction: "inbound", status: msg.status})
+            conn |> put_status(201) |> json(%{ok: true, message_id: msg.id})
+
+          {:error, changeset} ->
+            conn |> put_status(422) |> json(%{error: format_errors(changeset)})
+        end
+    end
+  end
+
+  def receive_message(conn, _params) do
+    conn |> put_status(400) |> json(%{error: "Missing required fields: from_instance_id, message"})
+  end
+
+  # HTTP peer-to-peer response delivery
+  def receive_response(conn, %{"from_instance_id" => _from_instance_id, "message_id" => message_id, "answer" => answer}) do
+    case Messages.get(message_id) do
+      nil ->
+        conn |> put_status(404) |> json(%{error: "Message not found"})
+
+      message ->
+        case Messages.reply(message, answer) do
+          {:ok, _updated} ->
+            json(conn, %{ok: true})
+
+          {:error, changeset} ->
+            conn |> put_status(422) |> json(%{error: format_errors(changeset)})
+        end
+    end
+  end
+
+  def receive_response(conn, _params) do
+    conn |> put_status(400) |> json(%{error: "Missing required fields: from_instance_id, message_id, answer"})
+  end
+
+  defp gen_id, do: :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+
   defp message_to_json(message) do
     %{
       id: message.id,

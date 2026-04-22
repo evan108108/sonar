@@ -76,27 +76,96 @@ defmodule Sonar.Messages do
   end
 
   defp maybe_relay_message(message) do
-    if relay_available?() and message.peer_id do
-      Sonar.Relay.send_message(message.peer_id, %{
+    if message.peer_id != nil do
+      payload = %{
         "question" => message.question,
         "context" => message.context,
         "message_id" => message.id,
         "expires_at" => message.expires_at
-      })
+      }
+
+      # Try Erlang distribution first, fall back to HTTP
+      relayed =
+        if relay_available?() do
+          case Sonar.Relay.send_message(message.peer_id, payload) do
+            :ok -> true
+            _ -> false
+          end
+        else
+          false
+        end
+
+      unless relayed, do: http_relay_message(message.peer_id, payload)
     end
   end
 
   defp maybe_relay_response(message) do
-    if relay_available?() and message.peer_id and message.answer do
-      Sonar.Relay.send_message(message.peer_id, %{
+    if message.peer_id != nil && message.answer != nil do
+      payload = %{
         "response_to" => message.id,
         "answer" => message.answer
-      })
+      }
+
+      relayed =
+        if relay_available?() do
+          case Sonar.Relay.send_message(message.peer_id, payload) do
+            :ok -> true
+            _ -> false
+          end
+        else
+          false
+        end
+
+      unless relayed, do: http_relay_response(message.peer_id, message.id, message.answer)
     end
   end
 
   defp relay_available? do
     Process.whereis(Sonar.Relay) != nil
+  end
+
+  # HTTP fallback for message delivery when Erlang distribution isn't connected
+  defp http_relay_message(peer_id, payload) do
+    case Sonar.Peers.get(peer_id) do
+      nil -> {:error, :peer_not_found}
+      peer ->
+        identity = Sonar.Identity.get()
+        url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive"
+        body = Jason.encode!(%{from_instance_id: identity.instance_id, message: payload})
+        http_post(url, body)
+    end
+  end
+
+  defp http_relay_response(peer_id, message_id, answer) do
+    case Sonar.Peers.get(peer_id) do
+      nil -> {:error, :peer_not_found}
+      peer ->
+        identity = Sonar.Identity.get()
+        url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive_response"
+        body = Jason.encode!(%{from_instance_id: identity.instance_id, message_id: message_id, answer: answer})
+        http_post(url, body)
+    end
+  end
+
+  defp http_post(url, body) do
+    uri = URI.parse(url)
+    host = String.to_charlist(uri.host || "127.0.0.1")
+    port = uri.port || 80
+    path = uri.path || "/"
+
+    case :gen_tcp.connect(host, port, [:binary, active: false], 5_000) do
+      {:ok, socket} ->
+        request = "POST #{path} HTTP/1.1\r\nHost: #{uri.host}:#{port}\r\nContent-Type: application/json\r\nContent-Length: #{byte_size(body)}\r\nConnection: close\r\n\r\n#{body}"
+        :gen_tcp.send(socket, request)
+        result = :gen_tcp.recv(socket, 0, 10_000)
+        :gen_tcp.close(socket)
+        case result do
+          {:ok, response} ->
+            if String.contains?(response, "200") or String.contains?(response, "201"), do: :ok, else: {:error, response}
+          error -> error
+        end
+      error -> error
+    end
   end
 
   defp gen_id, do: :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
