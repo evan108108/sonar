@@ -46,8 +46,10 @@ defmodule Sonar.Application do
   defp maybe_start_distribution do
     if discovery_enabled?() and Node.alive?() == false do
       hostname = :inet.gethostname() |> elem(1) |> to_string()
-      node_name = System.get_env("SONAR_NODE_NAME", "sonar@#{hostname}")
-                  |> String.to_atom()
+
+      node_name =
+        System.get_env("SONAR_NODE_NAME", "sonar@#{hostname}")
+        |> String.to_atom()
 
       cookie = get_or_create_cookie()
 

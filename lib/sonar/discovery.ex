@@ -38,6 +38,7 @@ defmodule Sonar.Discovery do
     # Start the mdns server for advertising
     Mdns.Server.start()
     Mdns.Server.set_ip(get_local_ip())
+
     Mdns.Server.add_service(%Mdns.Server.Service{
       domain: @service_type,
       data: "sonar-#{state.identity.name}.#{@service_type}",
@@ -55,7 +56,10 @@ defmodule Sonar.Discovery do
     send(self(), :query_peers)
     schedule_health_check()
 
-    Logger.info("Sonar Discovery: advertising as sonar-#{state.identity.name} on #{@service_type}")
+    Logger.info(
+      "Sonar Discovery: advertising as sonar-#{state.identity.name} on #{@service_type}"
+    )
+
     {:noreply, %{state | started: true}}
   end
 
@@ -64,6 +68,7 @@ defmodule Sonar.Discovery do
       Mdns.Client.query(@service_type)
       Process.send_after(self(), :query_peers, @query_interval)
     end
+
     {:noreply, state}
   end
 
@@ -97,6 +102,7 @@ defmodule Sonar.Discovery do
         case Sonar.Peers.find_by_instance_id(instance_id) do
           nil ->
             name = device.payload["name"] || hostname
+
             Sonar.Peers.create(%{
               "name" => name,
               "hostname" => hostname,
@@ -105,6 +111,7 @@ defmodule Sonar.Discovery do
               "discovery_method" => "mdns",
               "connection_status" => "discovered"
             })
+
             Logger.info("Sonar Discovery: new peer found — #{name} at #{hostname}:#{port}")
 
           peer ->
@@ -112,18 +119,25 @@ defmodule Sonar.Discovery do
               "hostname" => hostname,
               "port" => port,
               "last_seen_at" => DateTime.utc_now(),
-              "connection_status" => if(peer.connection_status == "offline", do: "discovered", else: peer.connection_status)
+              "connection_status" =>
+                if(peer.connection_status == "offline",
+                  do: "discovered",
+                  else: peer.connection_status
+                )
             })
         end
       end
     end
   end
 
-  defp handle_peer_lost(device) do
+  @doc false
+  def handle_peer_lost(device) do
     hostname = to_string(device.domain || device.ip |> :inet.ntoa() |> to_string())
 
     case Sonar.Peers.find_by_hostname(hostname) do
-      nil -> :ok
+      nil ->
+        :ok
+
       peer ->
         Sonar.Peers.update(peer, %{"connection_status" => "offline"})
         Logger.info("Sonar Discovery: peer lost — #{peer.name}")
@@ -132,17 +146,22 @@ defmodule Sonar.Discovery do
 
   defp check_peer_health do
     import Ecto.Query
-    peers = Sonar.Repo.all(
-      from p in Sonar.Schema.Peer,
-        where: p.connection_status in ["discovered", "paired"],
-        where: p.discovery_method == "manual"
-    )
+
+    peers =
+      Sonar.Repo.all(
+        from(p in Sonar.Schema.Peer,
+          where: p.connection_status in ["discovered", "paired"],
+          where: p.discovery_method == "manual"
+        )
+      )
 
     for peer <- peers do
       url = "http://#{peer.hostname}:#{peer.port}/api/health"
+
       case http_get(url) do
         {:ok, _} ->
           Sonar.Peers.update(peer, %{"last_seen_at" => DateTime.utc_now()})
+
         {:error, _} ->
           Sonar.Peers.update(peer, %{"connection_status" => "offline"})
       end
@@ -172,7 +191,9 @@ defmodule Sonar.Discovery do
         |> Enum.map(fn {ip, _, _} -> ip end)
         |> Enum.reject(fn ip -> ip == {127, 0, 0, 1} end)
         |> List.first() || {0, 0, 0, 0}
-      _ -> {0, 0, 0, 0}
+
+      _ ->
+        {0, 0, 0, 0}
     end
   end
 
@@ -184,4 +205,3 @@ defmodule Sonar.Discovery do
   defp parse_port(p) when is_integer(p), do: p
   defp parse_port(p) when is_binary(p), do: String.to_integer(p)
 end
-

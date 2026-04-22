@@ -23,7 +23,9 @@ defmodule SonarWeb.TrustController do
   def update(conn, _params) do
     conn
     |> put_status(400)
-    |> json(%{error: "missing or invalid fields: peer_id, trust_level in [basic, trusted, intimate]"})
+    |> json(%{
+      error: "missing or invalid fields: peer_id, trust_level in [basic, trusted, intimate]"
+    })
   end
 
   defp format_errors(changeset) do

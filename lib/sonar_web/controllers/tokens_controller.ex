@@ -57,9 +57,10 @@ defmodule SonarWeb.TokensController do
       _peer ->
         tokens =
           Repo.all(
-            from t in PeerToken,
+            from(t in PeerToken,
               where: t.peer_id == ^peer_id,
               order_by: [desc: t.inserted_at]
+            )
           )
 
         json(conn, Enum.map(tokens, &token_to_json/1))

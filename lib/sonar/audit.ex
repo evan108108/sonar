@@ -33,7 +33,7 @@ defmodule Sonar.Audit do
 
   def recent(limit \\ 50) do
     Repo.all(
-      from a in "audit_log",
+      from(a in "audit_log",
         order_by: [desc: a.inserted_at],
         limit: ^limit,
         select: %{
@@ -45,6 +45,7 @@ defmodule Sonar.Audit do
           response_time_ms: a.response_time_ms,
           inserted_at: a.inserted_at
         }
+      )
     )
   end
 

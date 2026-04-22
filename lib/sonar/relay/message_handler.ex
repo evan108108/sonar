@@ -25,14 +25,16 @@ defmodule Sonar.Relay.MessageHandler do
 
       peer ->
         if peer.connection_status in ["paired", "discovered"] do
-          attrs = Map.merge(message_attrs, %{
-            "id" => gen_id(),
-            "peer_id" => peer.id
-          })
+          attrs =
+            Map.merge(message_attrs, %{
+              "id" => gen_id(),
+              "peer_id" => peer.id
+            })
 
           case Sonar.Messages.receive_message(attrs) do
             {:ok, msg} ->
               Logger.info("Sonar Relay: stored inbound message #{msg.id} from #{peer.name}")
+
             {:error, reason} ->
               Logger.error("Sonar Relay: failed to store message — #{inspect(reason)}")
           end

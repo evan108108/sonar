@@ -9,10 +9,11 @@ defmodule SonarWeb.MessagesControllerTest do
   end
 
   test "POST /api/messages/send creates an outbound message", %{conn: conn, peer: p} do
-    conn = post(conn, "/api/messages/send", %{
-      peer_id: p.id,
-      question: "What is your architecture?"
-    })
+    conn =
+      post(conn, "/api/messages/send", %{
+        peer_id: p.id,
+        question: "What is your architecture?"
+      })
 
     body = json_response(conn, 202)
     assert body["status"] == "pending"

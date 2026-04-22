@@ -11,15 +11,17 @@ defmodule Sonar.RelayTest do
 
   describe "message relay logic" do
     test "send_message stores outbound message" do
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local"
+        })
 
-      {:ok, msg} = Messages.send_message(%{
-        "peer_id" => peer.id,
-        "question" => "What is your architecture?"
-      })
+      {:ok, msg} =
+        Messages.send_message(%{
+          "peer_id" => peer.id,
+          "question" => "What is your architecture?"
+        })
 
       assert msg.direction == "outbound"
       assert msg.status == "pending"
@@ -27,17 +29,20 @@ defmodule Sonar.RelayTest do
     end
 
     test "receive_message stores inbound message" do
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local"
+        })
 
       id = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
-      {:ok, msg} = Messages.receive_message(%{
-        "id" => id,
-        "peer_id" => peer.id,
-        "question" => "What do you know about infrastructure?"
-      })
+
+      {:ok, msg} =
+        Messages.receive_message(%{
+          "id" => id,
+          "peer_id" => peer.id,
+          "question" => "What do you know about infrastructure?"
+        })
 
       assert msg.direction == "inbound"
       assert msg.status == "pending"
@@ -45,17 +50,20 @@ defmodule Sonar.RelayTest do
     end
 
     test "reply updates message and sets answered_at" do
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local"
+        })
 
       id = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
-      {:ok, msg} = Messages.receive_message(%{
-        "id" => id,
-        "peer_id" => peer.id,
-        "question" => "What is 2+2?"
-      })
+
+      {:ok, msg} =
+        Messages.receive_message(%{
+          "id" => id,
+          "peer_id" => peer.id,
+          "question" => "What is 2+2?"
+        })
 
       {:ok, replied} = Messages.reply(msg, "4")
 
@@ -70,20 +78,23 @@ defmodule Sonar.RelayTest do
     end
 
     test "message handler stores inbound from known peer" do
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local",
-        "instance_id" => "scout-123",
-        "connection_status" => "paired"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local",
+          "instance_id" => "scout-123",
+          "connection_status" => "paired"
+        })
 
       # Simulate what MessageHandler does
       msg_id = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
-      {:ok, msg} = Messages.receive_message(%{
-        "id" => msg_id,
-        "peer_id" => peer.id,
-        "question" => "Relay test question"
-      })
+
+      {:ok, msg} =
+        Messages.receive_message(%{
+          "id" => msg_id,
+          "peer_id" => peer.id,
+          "question" => "Relay test question"
+        })
 
       assert msg.question == "Relay test question"
       assert msg.peer_id == peer.id
@@ -92,11 +103,12 @@ defmodule Sonar.RelayTest do
 
   describe "peer trust" do
     test "at_least_trust? checks trust hierarchy" do
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local",
-        "trust_level" => "trusted"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local",
+          "trust_level" => "trusted"
+        })
 
       assert Peers.at_least_trust?(peer, "basic")
       assert Peers.at_least_trust?(peer, "trusted")
@@ -104,11 +116,12 @@ defmodule Sonar.RelayTest do
     end
 
     test "set_trust updates trust level" do
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local",
-        "trust_level" => "basic"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local",
+          "trust_level" => "basic"
+        })
 
       {:ok, updated} = Peers.set_trust(peer, "trusted")
       assert updated.trust_level == "trusted"

@@ -8,7 +8,7 @@ defmodule Sonar.Peers do
   alias Sonar.Schema.Peer
 
   def list do
-    Repo.all(from p in Peer, order_by: [desc: p.inserted_at])
+    Repo.all(from(p in Peer, order_by: [desc: p.inserted_at]))
   end
 
   def get(id) do
@@ -16,12 +16,13 @@ defmodule Sonar.Peers do
   end
 
   def find_by_instance_id(nil), do: nil
+
   def find_by_instance_id(instance_id) do
-    Repo.one(from p in Peer, where: p.instance_id == ^instance_id)
+    Repo.one(from(p in Peer, where: p.instance_id == ^instance_id))
   end
 
   def find_by_hostname(hostname) do
-    Repo.one(from p in Peer, where: p.hostname == ^hostname, limit: 1)
+    Repo.one(from(p in Peer, where: p.hostname == ^hostname, limit: 1))
   end
 
   def create(attrs) do

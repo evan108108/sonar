@@ -9,11 +9,12 @@ defmodule Sonar.Identity do
   alias Sonar.Repo
 
   def start_link(_opts) do
-    identity = try do
-      load_or_create()
-    rescue
-      _ -> fallback_identity()
-    end
+    identity =
+      try do
+        load_or_create()
+      rescue
+        _ -> fallback_identity()
+      end
 
     Agent.start_link(fn -> identity end, name: __MODULE__)
   end
@@ -31,12 +32,16 @@ defmodule Sonar.Identity do
   end
 
   defp load_or_create do
-    case Repo.one(from r in "identity", select: %{
-      name: r.name,
-      instance_id: r.instance_id,
-      capabilities: r.capabilities,
-      cert_fingerprint: r.cert_fingerprint
-    }) do
+    case Repo.one(
+           from(r in "identity",
+             select: %{
+               name: r.name,
+               instance_id: r.instance_id,
+               capabilities: r.capabilities,
+               cert_fingerprint: r.cert_fingerprint
+             }
+           )
+         ) do
       nil -> create_identity()
       row -> parse_identity(row)
     end
@@ -48,15 +53,17 @@ defmodule Sonar.Identity do
     instance_id = generate_instance_id()
     now = DateTime.utc_now()
 
-    Repo.insert_all("identity", [%{
-      id: "singleton",
-      name: name,
-      instance_id: instance_id,
-      capabilities: "[]",
-      cert_fingerprint: nil,
-      inserted_at: now,
-      updated_at: now
-    }])
+    Repo.insert_all("identity", [
+      %{
+        id: "singleton",
+        name: name,
+        instance_id: instance_id,
+        capabilities: "[]",
+        cert_fingerprint: nil,
+        inserted_at: now,
+        updated_at: now
+      }
+    ])
 
     %{
       name: name,
@@ -67,10 +74,11 @@ defmodule Sonar.Identity do
   end
 
   defp parse_identity(row) do
-    capabilities = case Jason.decode(row.capabilities || "[]") do
-      {:ok, list} -> list
-      _ -> []
-    end
+    capabilities =
+      case Jason.decode(row.capabilities || "[]") do
+        {:ok, list} -> list
+        _ -> []
+      end
 
     %{
       name: row.name,

@@ -5,13 +5,13 @@ defmodule Sonar.Schema.PeerToken do
   @primary_key {:id, :string, autogenerate: false}
 
   schema "peer_tokens" do
-    field :token_hash, :string
-    field :scopes, :string, default: "query"
-    field :expires_at, :utc_datetime
-    field :last_used_at, :utc_datetime
-    field :revoked_at, :utc_datetime
+    field(:token_hash, :string)
+    field(:scopes, :string, default: "query")
+    field(:expires_at, :utc_datetime)
+    field(:last_used_at, :utc_datetime)
+    field(:revoked_at, :utc_datetime)
 
-    belongs_to :peer, Sonar.Schema.Peer, type: :string
+    belongs_to(:peer, Sonar.Schema.Peer, type: :string)
 
     timestamps()
   end

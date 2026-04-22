@@ -31,7 +31,9 @@ defmodule Sonar.Messages do
 
     result =
       %Message{}
-      |> Message.changeset(Map.merge(attrs, %{"id" => id, "direction" => "outbound", "status" => "pending"}))
+      |> Message.changeset(
+        Map.merge(attrs, %{"id" => id, "direction" => "outbound", "status" => "pending"})
+      )
       |> Repo.insert()
 
     # Attempt delivery via Erlang distribution if peer is connected

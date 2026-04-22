@@ -4,10 +4,12 @@ defmodule SonarWeb.MessagesController do
   alias Sonar.Messages
 
   def inbox(conn, params) do
-    opts = [
-      limit: parse_int(params["limit"]) || 50,
-      status: params["status"]
-    ] |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    opts =
+      [
+        limit: parse_int(params["limit"]) || 50,
+        status: params["status"]
+      ]
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
 
     messages = Messages.inbox(opts)
     json(conn, Enum.map(messages, &message_to_json/1))
@@ -31,7 +33,9 @@ defmodule SonarWeb.MessagesController do
 
     case Messages.send_message(attrs) do
       {:ok, message} ->
-        conn |> put_status(202) |> json(%{
+        conn
+        |> put_status(202)
+        |> json(%{
           message_id: message.id,
           status: "pending",
           poll_url: "/api/messages/#{message.id}"
@@ -53,8 +57,11 @@ defmodule SonarWeb.MessagesController do
 
       message ->
         case Messages.reply(message, answer) do
-          {:ok, message} -> json(conn, message_to_json(message))
-          {:error, changeset} -> conn |> put_status(422) |> json(%{error: format_errors(changeset)})
+          {:ok, message} ->
+            json(conn, message_to_json(message))
+
+          {:error, changeset} ->
+            conn |> put_status(422) |> json(%{error: format_errors(changeset)})
         end
     end
   end

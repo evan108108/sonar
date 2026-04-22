@@ -13,14 +13,15 @@ defmodule Sonar.DiscoveryTest do
   describe "peer discovered handling" do
     test "new peer is inserted into DB" do
       # Simulate what Discovery does when it finds a peer
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local",
-        "port" => 8400,
-        "instance_id" => "abc123",
-        "discovery_method" => "mdns",
-        "connection_status" => "discovered"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local",
+          "port" => 8400,
+          "instance_id" => "abc123",
+          "discovery_method" => "mdns",
+          "connection_status" => "discovered"
+        })
 
       assert peer.name == "scout"
       assert peer.hostname == "scout.local"
@@ -29,11 +30,12 @@ defmodule Sonar.DiscoveryTest do
     end
 
     test "existing peer is found by instance_id" do
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local",
-        "instance_id" => "abc123"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local",
+          "instance_id" => "abc123"
+        })
 
       found = Peers.find_by_instance_id("abc123")
       assert found.id == peer.id
@@ -44,27 +46,30 @@ defmodule Sonar.DiscoveryTest do
     end
 
     test "find_by_hostname returns the peer" do
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local"
+        })
 
       found = Peers.find_by_hostname("scout.local")
       assert found.id == peer.id
     end
 
     test "offline peer is updated on rediscovery" do
-      {:ok, peer} = Peers.create(%{
-        "name" => "scout",
-        "hostname" => "scout.local",
-        "instance_id" => "abc123",
-        "connection_status" => "offline"
-      })
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local",
+          "instance_id" => "abc123",
+          "connection_status" => "offline"
+        })
 
-      {:ok, updated} = Peers.update(peer, %{
-        "connection_status" => "discovered",
-        "last_seen_at" => DateTime.utc_now()
-      })
+      {:ok, updated} =
+        Peers.update(peer, %{
+          "connection_status" => "discovered",
+          "last_seen_at" => DateTime.utc_now()
+        })
 
       assert updated.connection_status == "discovered"
       assert updated.last_seen_at != nil

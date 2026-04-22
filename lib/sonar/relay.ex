@@ -78,10 +78,12 @@ defmodule Sonar.Relay do
         ref = Node.monitor(node, true)
         Logger.info("Sonar Relay: connected to #{node_name}")
 
-        state = %{state |
-          connected_peers: Map.put(state.connected_peers, peer_id, node),
-          monitors: Map.put(state.monitors, node, {peer_id, ref})
+        state = %{
+          state
+          | connected_peers: Map.put(state.connected_peers, peer_id, node),
+            monitors: Map.put(state.monitors, node, {peer_id, ref})
         }
+
         {:noreply, state}
 
       false ->
@@ -110,10 +112,12 @@ defmodule Sonar.Relay do
           peer -> Sonar.Peers.update(peer, %{"connection_status" => "offline"})
         end
 
-        state = %{state |
-          connected_peers: Map.delete(state.connected_peers, peer_id),
-          monitors: Map.delete(state.monitors, node)
+        state = %{
+          state
+          | connected_peers: Map.delete(state.connected_peers, peer_id),
+            monitors: Map.delete(state.monitors, node)
         }
+
         {:noreply, state}
 
       nil ->

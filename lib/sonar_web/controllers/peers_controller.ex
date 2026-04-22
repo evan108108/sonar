@@ -29,15 +29,20 @@ defmodule SonarWeb.PeersController do
 
       peer ->
         case Peers.update(peer, params) do
-          {:ok, peer} -> json(conn, peer_to_json(peer))
-          {:error, changeset} -> conn |> put_status(422) |> json(%{error: format_errors(changeset)})
+          {:ok, peer} ->
+            json(conn, peer_to_json(peer))
+
+          {:error, changeset} ->
+            conn |> put_status(422) |> json(%{error: format_errors(changeset)})
         end
     end
   end
 
   def delete(conn, %{"id" => id}) do
     case Peers.get(id) do
-      nil -> conn |> put_status(404) |> json(%{error: "Peer not found"})
+      nil ->
+        conn |> put_status(404) |> json(%{error: "Peer not found"})
+
       peer ->
         Peers.delete(peer)
         json(conn, %{ok: true})
