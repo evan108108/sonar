@@ -54,7 +54,8 @@ defmodule Sonar.Discovery do
 
     # Start periodic queries
     send(self(), :query_peers)
-    schedule_health_check()
+    # Run first health check quickly (3s) to auto-connect known peers
+    Process.send_after(self(), :health_check, 3_000)
 
     Logger.info(
       "Sonar Discovery: advertising as sonar-#{state.identity.name} on #{@service_type}"
@@ -159,8 +160,13 @@ defmodule Sonar.Discovery do
       url = "http://#{peer.hostname}:#{peer.port}/api/health"
 
       case http_get(url) do
-        {:ok, _} ->
+        {:ok, body} ->
           Sonar.Peers.update(peer, %{"last_seen_at" => DateTime.utc_now()})
+          # Auto-connect via Erlang distribution if relay is running and not already connected
+          if Process.whereis(Sonar.Relay) != nil and not Sonar.Relay.connected?(peer.id) do
+            node_name = derive_node_name(peer, body)
+            if node_name, do: Sonar.Relay.connect_peer(peer.id, node_name)
+          end
 
         {:error, _} ->
           Sonar.Peers.update(peer, %{"connection_status" => "offline"})
@@ -175,12 +181,22 @@ defmodule Sonar.Discovery do
       port = uri.port || 80
       path = to_charlist(uri.path || "/")
 
-      case :httpc.request(:get, {{host, port, path, []}, []}, [timeout: 5000], []) do
-        {:ok, {{_, 200, _}, _, _}} -> {:ok, :healthy}
+      case :httpc.request(:get, {~c"http://#{host}:#{port}#{path}", []}, [timeout: 5000], []) do
+        {:ok, {{_, 200, _}, _, body}} -> {:ok, to_string(body)}
         _ -> {:error, :unhealthy}
       end
     rescue
       _ -> {:error, :unreachable}
+    end
+  end
+
+  # Derive the Erlang node name from a peer's health response or hostname.
+  # The health endpoint returns {"node": "sonar@Mac", ...} — use that directly.
+  # Falls back to "sonar@<hostname>" if node isn't in the response.
+  defp derive_node_name(peer, health_body) do
+    case Jason.decode(health_body) do
+      {:ok, %{"node" => node}} when is_binary(node) and node != "nonode@nohost" -> node
+      _ -> "sonar@#{peer.hostname}"
     end
   end
 
