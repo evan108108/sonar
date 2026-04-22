@@ -8,6 +8,10 @@ defmodule Sonar.Discovery do
   use GenServer
   require Logger
 
+  # handle_peer_lost/1 will be wired up once mDNS :removed events are re-enabled;
+  # suppress the unused-function warning until then without deleting the code.
+  @compile {:nowarn_unused_function, handle_peer_lost: 1}
+
   @service_type "_sonar._tcp.local"
   @query_interval 15_000
   @health_interval 60_000
