@@ -138,24 +138,32 @@ defmodule Sonar.Messages do
 
   # HTTP fallback for message delivery when Erlang distribution isn't connected
   defp http_relay_message(peer_id, payload) do
-    case Sonar.Peers.get(peer_id) do
-      nil -> {:error, :peer_not_found}
-      peer ->
-        identity = Sonar.Identity.get()
-        url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive"
-        body = Jason.encode!(%{from_instance_id: identity.instance_id, message: payload})
-        http_post(url, body)
+    if Application.get_env(:sonar, :skip_http_relay, false) do
+      :ok
+    else
+      case Sonar.Peers.get(peer_id) do
+        nil -> {:error, :peer_not_found}
+        peer ->
+          identity = Sonar.Identity.get()
+          url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive"
+          body = Jason.encode!(%{from_instance_id: identity.instance_id, message: payload})
+          http_post(url, body)
+      end
     end
   end
 
   defp http_relay_response(peer_id, message_id, answer) do
-    case Sonar.Peers.get(peer_id) do
-      nil -> {:error, :peer_not_found}
-      peer ->
-        identity = Sonar.Identity.get()
-        url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive_response"
-        body = Jason.encode!(%{from_instance_id: identity.instance_id, message_id: message_id, answer: answer})
-        http_post(url, body)
+    if Application.get_env(:sonar, :skip_http_relay, false) do
+      :ok
+    else
+      case Sonar.Peers.get(peer_id) do
+        nil -> {:error, :peer_not_found}
+        peer ->
+          identity = Sonar.Identity.get()
+          url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive_response"
+          body = Jason.encode!(%{from_instance_id: identity.instance_id, message_id: message_id, answer: answer})
+          http_post(url, body)
+      end
     end
   end
 

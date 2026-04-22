@@ -27,9 +27,15 @@ defmodule Sonar.Peers do
 
   def create(attrs) do
     id = gen_id()
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    attrs =
+      attrs
+      |> Map.put("id", id)
+      |> Map.put_new("last_seen_at", now)
 
     %Peer{}
-    |> Peer.changeset(Map.put(attrs, "id", id))
+    |> Peer.changeset(attrs)
     |> Repo.insert()
   end
 

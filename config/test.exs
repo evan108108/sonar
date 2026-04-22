@@ -16,6 +16,9 @@ config :sonar, Sonar.Repo,
 # Skip auto-migrator in test — test_helper.exs handles it
 config :sonar, skip_migrator: true
 
+# Skip HTTP relay fallback in tests — fake peer hostnames would hang curl
+config :sonar, skip_http_relay: true
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 
