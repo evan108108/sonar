@@ -1,41 +1,34 @@
 defmodule SonarWeb.PeersController do
   use SonarWeb, :controller
 
-  import Ecto.Query
-  alias Sonar.Repo
-  alias Sonar.Schema.Peer
+  alias Sonar.Peers
 
   def index(conn, _params) do
-    peers = Repo.all(from p in Peer, order_by: [desc: p.inserted_at])
+    peers = Peers.list()
     json(conn, Enum.map(peers, &peer_to_json/1))
   end
 
   def show(conn, %{"id" => id}) do
-    case Repo.get(Peer, id) do
+    case Peers.get(id) do
       nil -> conn |> put_status(404) |> json(%{error: "Peer not found"})
       peer -> json(conn, peer_to_json(peer))
     end
   end
 
   def create(conn, params) do
-    id = gen_id()
-    changeset = Peer.changeset(%Peer{}, Map.put(params, "id", id))
-
-    case Repo.insert(changeset) do
+    case Peers.create(params) do
       {:ok, peer} -> conn |> put_status(201) |> json(peer_to_json(peer))
       {:error, changeset} -> conn |> put_status(422) |> json(%{error: format_errors(changeset)})
     end
   end
 
   def update(conn, %{"id" => id} = params) do
-    case Repo.get(Peer, id) do
+    case Peers.get(id) do
       nil ->
         conn |> put_status(404) |> json(%{error: "Peer not found"})
 
       peer ->
-        changeset = Peer.changeset(peer, params)
-
-        case Repo.update(changeset) do
+        case Peers.update(peer, params) do
           {:ok, peer} -> json(conn, peer_to_json(peer))
           {:error, changeset} -> conn |> put_status(422) |> json(%{error: format_errors(changeset)})
         end
@@ -43,10 +36,10 @@ defmodule SonarWeb.PeersController do
   end
 
   def delete(conn, %{"id" => id}) do
-    case Repo.get(Peer, id) do
+    case Peers.get(id) do
       nil -> conn |> put_status(404) |> json(%{error: "Peer not found"})
       peer ->
-        Repo.delete(peer)
+        Peers.delete(peer)
         json(conn, %{ok: true})
     end
   end
@@ -66,8 +59,6 @@ defmodule SonarWeb.PeersController do
       inserted_at: peer.inserted_at
     }
   end
-
-  defp gen_id, do: :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
 
   defp format_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->

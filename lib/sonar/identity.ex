@@ -9,7 +9,12 @@ defmodule Sonar.Identity do
   alias Sonar.Repo
 
   def start_link(_opts) do
-    identity = load_or_create()
+    identity = try do
+      load_or_create()
+    rescue
+      _ -> fallback_identity()
+    end
+
     Agent.start_link(fn -> identity end, name: __MODULE__)
   end
 
@@ -87,6 +92,15 @@ defmodule Sonar.Identity do
         updated_at: now
       ]
     )
+  end
+
+  defp fallback_identity do
+    %{
+      name: System.get_env("SONAR_NAME", "sonar"),
+      instance_id: generate_instance_id(),
+      capabilities: [],
+      version: app_version()
+    }
   end
 
   defp generate_instance_id do

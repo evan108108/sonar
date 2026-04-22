@@ -7,6 +7,12 @@ config :sonar, SonarWeb.Endpoint,
   secret_key_base: "UCIkvIS3sb0bh/QYUMuJThdgKucR1wfYFPbNnuUqKkSVUeeEH0zDEfyHhWK5q+LW",
   server: false
 
+# Use file-based SQLite for tests (in-memory has pool issues with sandbox)
+config :sonar, Sonar.Repo,
+  database: "/tmp/sonar_test.db",
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: 5
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 
