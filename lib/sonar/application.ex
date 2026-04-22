@@ -9,6 +9,7 @@ defmodule Sonar.Application do
   def start(_type, _args) do
     children = [
       SonarWeb.Telemetry,
+      Sonar.Repo,
       {DNSCluster, query: Application.get_env(:sonar, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Sonar.PubSub},
       Sonar.Identity,

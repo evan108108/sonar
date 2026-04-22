@@ -8,7 +8,13 @@
 import Config
 
 config :sonar,
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  ecto_repos: [Sonar.Repo]
+
+config :sonar, Sonar.Repo,
+  database: Path.expand("~/.sonar/sonar.db"),
+  journal_mode: :wal,
+  pool_size: 5
 
 # Configure the endpoint
 config :sonar, SonarWeb.Endpoint,
