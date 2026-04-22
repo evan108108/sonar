@@ -48,7 +48,8 @@ defmodule Sonar.MixProject do
       {:bandit, "~> 1.5"},
       {:ecto_sql, "~> 3.12"},
       {:ecto_sqlite3, "~> 0.17"},
-      {:mox, "~> 1.0", only: :test}
+      {:mox, "~> 1.0", only: :test},
+      {:mdns, "~> 1.0"}
     ]
   end
 

@@ -33,11 +33,21 @@ defmodule SonarWeb.Router do
     get "/peers/:peer_id/tokens", TokensController, :index
     delete "/peers/:peer_id/tokens/:token_id", TokensController, :revoke
 
+    # Trust
+    put "/trust/:peer_id", TrustController, :update
+
     # Messages
     get "/messages/inbox", MessagesController, :inbox
     get "/messages/:id", MessagesController, :show
     post "/messages/send", MessagesController, :send_message
     post "/messages/:id/reply", MessagesController, :reply
+  end
+
+  # Peer-facing public endpoints (no auth) — capability discovery
+  scope "/relay", SonarWeb do
+    pipe_through :api
+
+    get "/card", ServerCardController, :show
   end
 
   scope "/relay", SonarWeb do

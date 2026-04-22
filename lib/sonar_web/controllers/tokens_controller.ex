@@ -3,7 +3,7 @@ defmodule SonarWeb.TokensController do
 
   import Ecto.Query
 
-  alias Sonar.Repo
+  alias Sonar.{Audit, Repo}
   alias Sonar.Schema.{Peer, PeerToken}
 
   def create(conn, %{"peer_id" => peer_id} = params) do
@@ -25,6 +25,13 @@ defmodule SonarWeb.TokensController do
 
         case %PeerToken{} |> PeerToken.changeset(attrs) |> Repo.insert() do
           {:ok, token} ->
+            Audit.log(%{
+              action: "token.issued",
+              peer_id: peer.id,
+              peer_name: peer.name,
+              response_status: 201
+            })
+
             conn
             |> put_status(201)
             |> json(%{
@@ -71,6 +78,12 @@ defmodule SonarWeb.TokensController do
           token
           |> Ecto.Changeset.change(revoked_at: now)
           |> Repo.update()
+
+        Audit.log(%{
+          action: "token.revoked",
+          peer_id: token.peer_id,
+          response_status: 200
+        })
 
         json(conn, token_to_json(token))
     end
