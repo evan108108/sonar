@@ -8,11 +8,14 @@ defmodule Sonar.Application do
     maybe_start_distribution()
 
     # Auto-migrate on startup (safe for SQLite, idempotent)
+    # Skip Migrator in test — test_helper.exs handles migrations
+    migrator = if Application.get_env(:sonar, :skip_migrator), do: [], else: [{Sonar.Migrator, []}]
+
     children =
       [
         SonarWeb.Telemetry,
-        Sonar.Repo,
-        {Sonar.Migrator, []},
+        Sonar.Repo
+      ] ++ migrator ++ [
         {DNSCluster, query: Application.get_env(:sonar, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Sonar.PubSub},
         Sonar.Identity,

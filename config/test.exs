@@ -13,6 +13,9 @@ config :sonar, Sonar.Repo,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 5
 
+# Skip auto-migrator in test — test_helper.exs handles it
+config :sonar, skip_migrator: true
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

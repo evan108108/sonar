@@ -9,13 +9,16 @@ end
 config :sonar, SonarWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
 # DB path — plugin data dir takes precedence, then SONAR_DB, then default
-db_path =
-  case System.get_env("SONATA_PLUGIN_DATA_DIR") do
-    nil -> System.get_env("SONAR_DB", Path.expand("~/.sonar/sonar.db"))
-    plugin_dir -> Path.join(plugin_dir, "sonar.db")
-  end
+# Skip in test env — test.exs sets the sandboxed DB path
+if config_env() != :test do
+  db_path =
+    case System.get_env("SONATA_PLUGIN_DATA_DIR") do
+      nil -> System.get_env("SONAR_DB", Path.expand("~/.sonar/sonar.db"))
+      plugin_dir -> Path.join(plugin_dir, "sonar.db")
+    end
 
-config :sonar, Sonar.Repo, database: db_path
+  config :sonar, Sonar.Repo, database: db_path
+end
 
 if config_env() == :prod do
   # Generate a secret key base if not provided
