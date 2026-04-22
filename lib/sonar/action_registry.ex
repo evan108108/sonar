@@ -137,7 +137,7 @@ defmodule Sonar.ActionRegistry do
         method: :post,
         path: "/api/messages/send",
         params: [
-          Action.param("peer_id", :string, required: true, description: "Target peer ID"),
+          Action.param("peer_id", :string, required: true, description: "Target peer ID (use the 'id' field from sonar_peers, NOT instance_id)"),
           Action.param("question", :string, required: true, description: "The message to send"),
           Action.param("context", :string, description: "Additional context"),
           Action.param("expires_at", :integer, description: "TTL as epoch ms")
