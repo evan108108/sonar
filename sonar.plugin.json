@@ -1,0 +1,35 @@
+{
+  "name": "sonar",
+  "version": "0.1.0",
+  "description": "Peer-to-peer agent communication relay",
+  "author": "evan108108",
+  "sonata_version": ">= 3.0",
+  "port": 4000,
+  "arch": "arm64",
+  "start_command": "bin/sonar start",
+  "events_channel": "/socket/websocket",
+  "events_topic": "messages:events",
+  "config_schema": {
+    "discovery_enabled": {"type": "boolean", "default": false}
+  },
+  "actions": [
+    {"name": "identity", "description": "Get this Sonar instance's identity", "method": "get", "path": "/api/identity", "params": []},
+    {"name": "identity_update", "description": "Update instance name or capabilities", "method": "put", "path": "/api/identity",
+      "params": [{"name": "name", "type": "string", "required": false, "description": "Instance name"}, {"name": "capabilities", "type": "array", "required": false, "description": "Capabilities list"}]},
+    {"name": "peers", "description": "List all known peers", "method": "get", "path": "/api/peers", "params": []},
+    {"name": "peer_register", "description": "Register a new peer", "method": "post", "path": "/api/peers",
+      "params": [{"name": "name", "type": "string", "required": true, "description": "Peer name"}, {"name": "hostname", "type": "string", "required": true, "description": "Hostname"}, {"name": "port", "type": "integer", "required": true, "description": "Port"}]},
+    {"name": "peer_trust", "description": "Set trust level for a peer", "method": "put", "path": "/api/peers/:peer_id/trust",
+      "params": [{"name": "peer_id", "type": "string", "required": true, "description": "Peer ID"}, {"name": "trust_level", "type": "string", "required": true, "description": "basic, trusted, or intimate"}]},
+    {"name": "send", "description": "Send a message to a peer", "method": "post", "path": "/api/messages/send",
+      "params": [{"name": "peer_id", "type": "string", "required": true, "description": "Target peer ID"}, {"name": "question", "type": "string", "required": true, "description": "The message"}, {"name": "context", "type": "string", "required": false, "description": "Additional context"}]},
+    {"name": "inbox", "description": "List received messages", "method": "get", "path": "/api/messages/inbox",
+      "params": [{"name": "status", "type": "string", "required": false, "description": "Filter by status"}, {"name": "limit", "type": "integer", "required": false, "description": "Max results"}]},
+    {"name": "message", "description": "Get a specific message", "method": "get", "path": "/api/messages/:message_id",
+      "params": [{"name": "message_id", "type": "string", "required": true, "description": "Message ID"}]},
+    {"name": "reply", "description": "Reply to an incoming message", "method": "post", "path": "/api/messages/:message_id/reply",
+      "params": [{"name": "message_id", "type": "string", "required": true, "description": "Message ID"}, {"name": "answer", "type": "string", "required": true, "description": "The reply"}]},
+    {"name": "health", "description": "Health check", "method": "get", "path": "/api/health", "params": []},
+    {"name": "card", "description": "Server discovery card", "method": "get", "path": "/.well-known/sonar/card.json", "params": []}
+  ]
+}

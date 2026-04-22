@@ -36,6 +36,9 @@ defmodule SonarWeb.Router do
     # Trust
     put "/trust/:peer_id", TrustController, :update
 
+    # Plugin discovery
+    get "/actions", ActionListController, :index
+
     # Messages
     get "/messages/inbox", MessagesController, :inbox
     get "/messages/:id", MessagesController, :show

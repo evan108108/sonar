@@ -8,9 +8,14 @@ end
 # Port config — defaults to 4000
 config :sonar, SonarWeb.Endpoint, http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
-# DB path — use ~/.sonar/sonar.db by default, override with SONAR_DB
-config :sonar, Sonar.Repo,
-  database: System.get_env("SONAR_DB", Path.expand("~/.sonar/sonar.db"))
+# DB path — plugin data dir takes precedence, then SONAR_DB, then default
+db_path =
+  case System.get_env("SONATA_PLUGIN_DATA_DIR") do
+    nil -> System.get_env("SONAR_DB", Path.expand("~/.sonar/sonar.db"))
+    plugin_dir -> Path.join(plugin_dir, "sonar.db")
+  end
+
+config :sonar, Sonar.Repo, database: db_path
 
 if config_env() == :prod do
   # Generate a secret key base if not provided
