@@ -28,7 +28,9 @@ defmodule SonarWeb.MessagesController do
       "question" => question,
       "context" => params["context"],
       "expires_at" => parse_datetime(params["expires_at"]),
-      "callback_url" => params["callback_url"]
+      "callback_url" => params["callback_url"],
+      "target_session_id" => params["target_session_id"],
+      "from_session_id" => params["from_session_id"]
     }
 
     case Messages.send_message(attrs) do
@@ -73,15 +75,25 @@ defmodule SonarWeb.MessagesController do
         conn |> put_status(404) |> json(%{error: "Unknown sender instance"})
 
       peer ->
-        attrs = Map.merge(message_attrs, %{
-          "id" => gen_id(),
-          "peer_id" => peer.id,
-          "remote_message_id" => message_attrs["message_id"]
-        })
+        attrs =
+          message_attrs
+          |> Map.merge(%{
+            "id" => gen_id(),
+            "peer_id" => peer.id,
+            "remote_message_id" => message_attrs["message_id"]
+          })
 
         case Messages.receive_message(attrs) do
           {:ok, msg} ->
-            SonarWeb.Endpoint.broadcast("messages:events", "new_message", %{message_id: msg.id, from_peer: from_instance_id, question: msg.question, direction: "inbound", status: msg.status})
+            SonarWeb.Endpoint.broadcast("messages:events", "new_message", %{
+              message_id: msg.id,
+              from_peer: from_instance_id,
+              question: msg.question,
+              direction: "inbound",
+              status: msg.status,
+              target_session_id: msg.target_session_id,
+              from_session_id: msg.from_session_id
+            })
             conn |> put_status(201) |> json(%{ok: true, message_id: msg.id})
 
           {:error, changeset} ->
@@ -101,7 +113,7 @@ defmodule SonarWeb.MessagesController do
       nil ->
         conn |> put_status(404) |> json(%{error: "Message not found"})
 
-      message ->
+      _message ->
         case Messages.update_answer(message_id, answer) do
           {:ok, _updated} ->
             SonarWeb.Endpoint.broadcast("messages:events", "reply_received", %{message_id: message_id, answer: answer})
@@ -131,6 +143,8 @@ defmodule SonarWeb.MessagesController do
       expires_at: message.expires_at,
       remote_message_id: message.remote_message_id,
       answered_at: message.answered_at,
+      target_session_id: message.target_session_id,
+      from_session_id: message.from_session_id,
       inserted_at: message.inserted_at
     }
   end

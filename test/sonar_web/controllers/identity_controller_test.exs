@@ -20,6 +20,16 @@ defmodule SonarWeb.IdentityControllerTest do
   test "PUT /api/identity updates capabilities", %{conn: conn} do
     conn = put(conn, "/api/identity", %{capabilities: ["memory", "search"]})
     body = json_response(conn, 200)
-    assert body["capabilities"] == ["memory", "search"]
+    # User-supplied capabilities round-trip; built-in ones (e.g. dm_v1) are
+    # always advertised on top — see Sonar.Identity.merge_capabilities/1.
+    assert "memory" in body["capabilities"]
+    assert "search" in body["capabilities"]
+    assert "dm_v1" in body["capabilities"]
+  end
+
+  test "GET /api/identity advertises built-in dm_v1 capability", %{conn: conn} do
+    conn = get(conn, "/api/identity")
+    body = json_response(conn, 200)
+    assert "dm_v1" in body["capabilities"]
   end
 end

@@ -8,6 +8,11 @@ defmodule Sonar.Identity do
   import Ecto.Query
   alias Sonar.Repo
 
+  # Built-in capabilities advertised on every identity, regardless of what was
+  # persisted. Surfaces on /.well-known/sonar/card.json via sonar_card. v0
+  # adds dm_v1 (session-addressable DMs — see sonar-dm-v0 plan §3).
+  @built_in_capabilities ["dm_v1"]
+
   def start_link(_opts) do
     identity =
       try do
@@ -20,8 +25,15 @@ defmodule Sonar.Identity do
   end
 
   def get do
-    Agent.get(__MODULE__, & &1)
+    identity = Agent.get(__MODULE__, & &1)
+    Map.put(identity, :capabilities, merge_capabilities(identity[:capabilities] || []))
   end
+
+  defp merge_capabilities(stored) when is_list(stored) do
+    (stored ++ @built_in_capabilities) |> Enum.uniq()
+  end
+
+  defp merge_capabilities(_), do: @built_in_capabilities
 
   def update(changes) when is_map(changes) do
     Agent.update(__MODULE__, fn identity ->

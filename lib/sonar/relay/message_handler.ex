@@ -34,7 +34,15 @@ defmodule Sonar.Relay.MessageHandler do
           case Sonar.Messages.receive_message(attrs) do
             {:ok, msg} ->
               Logger.info("Sonar Relay: stored inbound message #{msg.id} from #{peer.name}")
-              SonarWeb.Endpoint.broadcast("messages:events", "new_message", %{message_id: msg.id, from_peer: from_instance_id, question: msg.question, direction: "inbound", status: msg.status})
+              SonarWeb.Endpoint.broadcast("messages:events", "new_message", %{
+                message_id: msg.id,
+                from_peer: from_instance_id,
+                question: msg.question,
+                direction: "inbound",
+                status: msg.status,
+                target_session_id: msg.target_session_id,
+                from_session_id: msg.from_session_id
+              })
 
             {:error, reason} ->
               Logger.error("Sonar Relay: failed to store message — #{inspect(reason)}")

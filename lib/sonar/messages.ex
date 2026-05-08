@@ -91,7 +91,9 @@ defmodule Sonar.Messages do
         "question" => message.question,
         "context" => message.context,
         "message_id" => message.id,
-        "expires_at" => message.expires_at
+        "expires_at" => message.expires_at,
+        "target_session_id" => message.target_session_id,
+        "from_session_id" => message.from_session_id
       }
 
       # Try Erlang distribution first, fall back to HTTP

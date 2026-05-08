@@ -11,6 +11,7 @@ defmodule Sonar.ActionRegistry do
     identity_actions() ++
     peer_actions() ++
     message_actions() ++
+    session_actions() ++
     system_actions()
   end
 
@@ -189,6 +190,29 @@ defmodule Sonar.ActionRegistry do
           case Sonar.Messages.get(args["message_id"]) do
             nil -> {:error, :not_found}
             msg -> Sonar.Messages.reply(msg, args["answer"])
+          end
+        end
+      }
+    ]
+  end
+
+  defp session_actions do
+    [
+      %Action{
+        name: "sonar_session_list",
+        description: "List DM sessions registered locally, or on a paired peer when peer_id is set.",
+        method: :get,
+        path: "/api/sessions",
+        params: [
+          Action.param("peer_id", :string,
+            description: "If set, queries the remote peer's session list (peer must be paired)"
+          )
+        ],
+        handler: fn args ->
+          case args["peer_id"] do
+            nil -> Sonar.Sessions.list_local()
+            "" -> Sonar.Sessions.list_local()
+            peer_id -> Sonar.Sessions.list_remote(peer_id)
           end
         end
       }

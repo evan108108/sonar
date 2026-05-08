@@ -2,7 +2,6 @@ defmodule Sonar.DiscoveryTest do
   use ExUnit.Case
 
   alias Sonar.Peers
-  alias Sonar.Schema.Peer
 
   setup do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Sonar.Repo, shared: false)

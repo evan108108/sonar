@@ -48,6 +48,10 @@ defmodule SonarWeb.Router do
     # Peer-to-peer HTTP message delivery (fallback when Erlang distribution isn't available)
     post "/messages/receive", MessagesController, :receive_message
     post "/messages/receive_response", MessagesController, :receive_response
+
+    # DM session discovery
+    get "/sessions", SessionsController, :index
+    get "/sessions/local", SessionsController, :local
   end
 
   # Peer-facing public endpoints (no auth) — capability discovery
