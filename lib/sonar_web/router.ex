@@ -24,6 +24,7 @@ defmodule SonarWeb.Router do
     # Peers
     get "/peers", PeersController, :index
     get "/peers/:id", PeersController, :show
+    get "/peers/:id/card", PeersController, :card
     post "/peers", PeersController, :create
     put "/peers/:id", PeersController, :update
     delete "/peers/:id", PeersController, :delete

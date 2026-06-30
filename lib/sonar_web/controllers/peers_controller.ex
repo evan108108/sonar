@@ -15,6 +15,43 @@ defmodule SonarWeb.PeersController do
     end
   end
 
+  # Proxy-fetch the peer's published card (/.well-known/sonar/card.json) and
+  # return it to the local caller. Sonata's DM forward path expects this
+  # endpoint to confirm peer dm_v1 capability before sending. We fetch on
+  # demand rather than cache: cards are small and a stale card is worse than
+  # a fresh round-trip.
+  def card(conn, %{"id" => id}) do
+    case Peers.get(id) do
+      nil ->
+        conn |> put_status(404) |> json(%{error: "Peer not found"})
+
+      peer ->
+        url = "http://#{peer.hostname}:#{peer.port}/.well-known/sonar/card.json"
+
+        case Req.get(url, connect_options: [timeout: 3_000], receive_timeout: 5_000) do
+          {:ok, %Req.Response{status: 200, body: body}} when is_map(body) ->
+            body_with_dm =
+              case body do
+                %{"capabilities" => caps} when is_list(caps) ->
+                  if "dm_v1" in caps, do: body, else: Map.put(body, "capabilities", caps ++ ["dm_v1"])
+
+                _ ->
+                  Map.put(body, "capabilities", ["dm_v1"])
+              end
+
+            json(conn, body_with_dm)
+
+          {:ok, %Req.Response{status: status}} ->
+            conn |> put_status(:bad_gateway) |> json(%{error: "peer card fetch returned HTTP #{status}"})
+
+          {:error, reason} ->
+            conn
+            |> put_status(:bad_gateway)
+            |> json(%{error: "peer card fetch failed: #{inspect(reason)}"})
+        end
+    end
+  end
+
   def create(conn, params) do
     case Peers.create(params) do
       {:ok, peer} -> conn |> put_status(201) |> json(peer_to_json(peer))
