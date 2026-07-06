@@ -27,7 +27,15 @@ defmodule Sonar.Messages do
   end
 
   def send_message(attrs) do
-    id = gen_id()
+    # Honor a caller-provided message id (Sonata sends M_origin as a UUID) so the
+    # id is stable end-to-end; generate one only when absent.
+    id = attrs["message_id"] || gen_id()
+
+    # Pass-through fields that ride the wire but are not persisted (no column).
+    extras = %{
+      "in_reply_to" => attrs["in_reply_to"],
+      "sender_display" => attrs["sender_display"]
+    }
 
     result =
       %Message{}
@@ -39,7 +47,7 @@ defmodule Sonar.Messages do
     # Attempt delivery via Erlang distribution if peer is connected
     case result do
       {:ok, message} ->
-        maybe_relay_message(message)
+        maybe_relay_message(message, extras)
         {:ok, message}
 
       error ->
@@ -85,7 +93,64 @@ defmodule Sonar.Messages do
     |> Repo.insert()
   end
 
-  defp maybe_relay_message(message) do
+  @doc """
+  Builds the `new_message` plugin-webhook payload broadcast to Sonata for an
+  inbound peer DM.
+
+  `msg` is the persisted `Sonar.Schema.Message`, `peer` the sending
+  `Sonar.Schema.Peer`, `from_instance_id` the sender's instance id, and
+  `raw_attrs` the raw inbound wire payload (used to forward pass-through fields
+  that Sonar does not persist).
+
+  Fields `in_reply_to` and `sender_display` are forwarded verbatim from the
+  wire payload — they are not columns on the messages table (persisting them
+  would require a migration). They are `nil` for initiating DMs.
+  """
+  def new_message_event(msg, peer, from_instance_id, raw_attrs \\ %{}) do
+    %{
+      # The origin's id (stored as remote_message_id on receive) so acks
+      # correlate back to the sender's audit row; falls back to local id.
+      message_id: msg.remote_message_id || msg.id,
+      from_peer: from_instance_id,
+      from_peer_id: peer && peer.id,
+      from_peer_name: peer && peer.name,
+      sender_display: raw_attrs["sender_display"],
+      in_reply_to: raw_attrs["in_reply_to"],
+      direction: "inbound",
+      status: msg.status,
+      # `body` is the renamed field; `question` is kept for backcompat.
+      body: msg.question,
+      question: msg.question,
+      context: msg.context,
+      target_session_id: msg.target_session_id,
+      from_session_id: msg.from_session_id
+    }
+  end
+
+  @doc """
+  Forwards a cross-peer DM acknowledgement to the origin peer (`peer_id`).
+
+  Tries the Erlang relay first, falling back to HTTP. The origin peer's Sonar
+  then emits an `ack_forward` plugin-webhook event to its local Sonata.
+  """
+  def send_ack_forward(peer_id, message_id, acked_at_ms) do
+    payload = %{"message_id" => message_id, "acked_at_ms" => acked_at_ms}
+
+    relayed =
+      if relay_available?() do
+        case Sonar.Relay.send_ack(peer_id, payload) do
+          :ok -> true
+          _ -> false
+        end
+      else
+        false
+      end
+
+    unless relayed, do: http_relay_ack(peer_id, payload)
+    :ok
+  end
+
+  defp maybe_relay_message(message, extras) do
     if message.peer_id != nil do
       payload = %{
         "question" => message.question,
@@ -93,7 +158,10 @@ defmodule Sonar.Messages do
         "message_id" => message.id,
         "expires_at" => message.expires_at,
         "target_session_id" => message.target_session_id,
-        "from_session_id" => message.from_session_id
+        "from_session_id" => message.from_session_id,
+        # Forwarded verbatim; nil for initiating DMs. Not persisted locally.
+        "in_reply_to" => extras["in_reply_to"],
+        "sender_display" => extras["sender_display"]
       }
 
       # Try Erlang distribution first, fall back to HTTP
@@ -164,6 +232,23 @@ defmodule Sonar.Messages do
           identity = Sonar.Identity.get()
           url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive_response"
           body = Jason.encode!(%{from_instance_id: identity.instance_id, message_id: message_id, answer: answer})
+          http_post(url, body)
+      end
+    end
+  end
+
+  defp http_relay_ack(peer_id, payload) do
+    if Application.get_env(:sonar, :skip_http_relay, false) do
+      :ok
+    else
+      case Sonar.Peers.get(peer_id) do
+        nil ->
+          {:error, :peer_not_found}
+
+        peer ->
+          identity = Sonar.Identity.get()
+          url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive_ack"
+          body = Jason.encode!(%{from_instance_id: identity.instance_id, message: payload})
           http_post(url, body)
       end
     end

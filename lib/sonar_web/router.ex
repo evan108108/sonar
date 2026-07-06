@@ -44,11 +44,13 @@ defmodule SonarWeb.Router do
     get "/messages/inbox", MessagesController, :inbox
     get "/messages/:id", MessagesController, :show
     post "/messages/send", MessagesController, :send_message
+    post "/messages/ack_forward", MessagesController, :ack_forward
     post "/messages/:id/reply", MessagesController, :reply
 
     # Peer-to-peer HTTP message delivery (fallback when Erlang distribution isn't available)
     post "/messages/receive", MessagesController, :receive_message
     post "/messages/receive_response", MessagesController, :receive_response
+    post "/messages/receive_ack", MessagesController, :receive_ack
 
     # DM session discovery
     get "/sessions", SessionsController, :index

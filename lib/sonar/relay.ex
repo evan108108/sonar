@@ -21,6 +21,11 @@ defmodule Sonar.Relay do
     GenServer.call(__MODULE__, {:send_message, peer_id, message_attrs})
   end
 
+  @doc "Forward a DM acknowledgement to a peer via Erlang distribution"
+  def send_ack(peer_id, ack_attrs) do
+    GenServer.call(__MODULE__, {:send_ack, peer_id, ack_attrs})
+  end
+
   @doc "Check if a peer is connected via Erlang distribution"
   def connected?(peer_id) do
     GenServer.call(__MODULE__, {:connected?, peer_id})
@@ -52,6 +57,24 @@ defmodule Sonar.Relay do
       node_name ->
         identity = Sonar.Identity.get()
         payload = {:sonar_message, identity.instance_id, message_attrs}
+
+        try do
+          GenServer.cast({Sonar.Relay.MessageHandler, node_name}, payload)
+          {:reply, :ok, state}
+        rescue
+          e -> {:reply, {:error, e}, state}
+        end
+    end
+  end
+
+  def handle_call({:send_ack, peer_id, ack_attrs}, _from, state) do
+    case Map.get(state.connected_peers, peer_id) do
+      nil ->
+        {:reply, {:error, :not_connected}, state}
+
+      node_name ->
+        identity = Sonar.Identity.get()
+        payload = {:sonar_ack, identity.instance_id, ack_attrs}
 
         try do
           GenServer.cast({Sonar.Relay.MessageHandler, node_name}, payload)

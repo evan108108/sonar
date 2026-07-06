@@ -28,21 +28,20 @@ defmodule Sonar.Relay.MessageHandler do
           attrs =
             Map.merge(message_attrs, %{
               "id" => gen_id(),
-              "peer_id" => peer.id
+              "peer_id" => peer.id,
+              # Preserve the origin's id (mirrors the HTTP receive path) so the
+              # id stays stable across the hop and acks correlate.
+              "remote_message_id" => message_attrs["message_id"]
             })
 
           case Sonar.Messages.receive_message(attrs) do
             {:ok, msg} ->
               Logger.info("Sonar Relay: stored inbound message #{msg.id} from #{peer.name}")
-              SonarWeb.Endpoint.broadcast("messages:events", "new_message", %{
-                message_id: msg.id,
-                from_peer: from_instance_id,
-                question: msg.question,
-                direction: "inbound",
-                status: msg.status,
-                target_session_id: msg.target_session_id,
-                from_session_id: msg.from_session_id
-              })
+              SonarWeb.Endpoint.broadcast(
+                "messages:events",
+                "new_message",
+                Sonar.Messages.new_message_event(msg, peer, from_instance_id, message_attrs)
+              )
 
             {:error, reason} ->
               Logger.error("Sonar Relay: failed to store message — #{inspect(reason)}")
@@ -70,6 +69,19 @@ defmodule Sonar.Relay.MessageHandler do
           {:error, _} -> :ok
         end
     end
+
+    {:noreply, state}
+  end
+
+  # Incoming DM acknowledgement forwarded from a peer — emit an `ack_forward`
+  # plugin-webhook event to the local Sonata.
+  def handle_cast({:sonar_ack, from_instance_id, ack_attrs}, state) do
+    Logger.info("Sonar Relay: received ack_forward from #{from_instance_id}")
+
+    SonarWeb.Endpoint.broadcast("messages:events", "ack_forward", %{
+      message_id: ack_attrs["message_id"],
+      acked_at_ms: ack_attrs["acked_at_ms"]
+    })
 
     {:noreply, state}
   end

@@ -2,10 +2,14 @@ defmodule Sonar.Sessions do
   @moduledoc """
   Session discovery for Sonar DMs.
 
-  v0 acts as a thin window onto Sonata's DM registry. The local listing is
-  fetched over loopback HTTP from Sonata (`http://127.0.0.1:3211/api/dm/registry`).
+  v0 acts as a thin window onto Sonata's DM-able targets. The local listing is
+  fetched over loopback HTTP from Sonata (`http://127.0.0.1:3211/api/dm/targets`).
   Remote listings are fetched from a paired peer's Sonar (`/api/sessions/local`)
   — paired-trust only, no HMAC in v0 (per ratified plan §11.2).
+
+  Sonata's legacy `dm_registry` endpoint was removed in the DM Registry
+  Eradication refactor (2026-07-02); `dm_targets` replaces it and returns a flat
+  `targets` list where presence == currently DM-able.
 
   Both functions are degrade-graceful: a failed local lookup returns an empty
   list with `queried_at` set, and logs a warning. A failed remote lookup
@@ -14,7 +18,7 @@ defmodule Sonar.Sessions do
 
   require Logger
 
-  @sonata_registry_url "http://127.0.0.1:3211/api/dm/registry"
+  @sonata_targets_url "http://127.0.0.1:3211/api/dm/targets"
   @local_timeout_ms 2_000
   @remote_timeout_ms 5_000
 
@@ -25,9 +29,15 @@ defmodule Sonar.Sessions do
   returns `{:ok, %{sessions: [], queried_at: ms}}` and logs a warning.
   """
   def list_local do
-    case http_get(@sonata_registry_url, @local_timeout_ms) do
+    case http_get(@sonata_targets_url, @local_timeout_ms) do
       {:ok, body} ->
         case Jason.decode(body) do
+          {:ok, %{"targets" => targets} = decoded} ->
+            sessions = Enum.map(targets, &normalize_entry/1)
+            queried_at = decoded["generatedAt"] || decoded["queried_at"] || now_ms()
+            {:ok, %{sessions: sessions, queried_at: queried_at}}
+
+          # Backcompat: tolerate the legacy `entries` (dm_registry) shape.
           {:ok, %{"entries" => entries} = decoded} ->
             sessions = Enum.map(entries, &normalize_entry/1)
             queried_at = decoded["generatedAt"] || now_ms()
@@ -96,11 +106,15 @@ defmodule Sonar.Sessions do
 
   # ---- internal ----
 
+  # Handles both the `dm_targets` shape (name/kind/sessionKey/workerId/peerId)
+  # and the peer `/api/sessions/local` shape (session_id/session_label/role).
   defp normalize_entry(entry) when is_map(entry) do
     %{
-      session_id: entry["session_id"] || entry["sessionId"],
-      session_label: entry["session_label"] || entry["sessionLabel"],
-      role: entry["role"],
+      session_id:
+        entry["session_id"] || entry["sessionId"] || entry["sessionKey"] ||
+          entry["workerId"] || entry["peerId"],
+      session_label: entry["session_label"] || entry["sessionLabel"] || entry["name"],
+      role: entry["role"] || entry["kind"],
       registered_at: entry["registered_at"] || entry["registeredAt"]
     }
   end

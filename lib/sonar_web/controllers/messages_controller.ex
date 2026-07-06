@@ -30,7 +30,14 @@ defmodule SonarWeb.MessagesController do
       "expires_at" => parse_datetime(params["expires_at"]),
       "callback_url" => params["callback_url"],
       "target_session_id" => params["target_session_id"],
-      "from_session_id" => params["from_session_id"]
+      "from_session_id" => params["from_session_id"],
+      # Honor the origin's message id so it stays stable across the whole hop
+      # (origin audit row -> wire -> receiver event -> ack). Falls back to a
+      # generated id when absent (see Messages.send_message).
+      "message_id" => params["message_id"],
+      # Pass-through extras — forwarded verbatim on the wire, not persisted.
+      "in_reply_to" => params["in_reply_to"],
+      "sender_display" => params["sender_display"]
     }
 
     case Messages.send_message(attrs) do
@@ -85,15 +92,11 @@ defmodule SonarWeb.MessagesController do
 
         case Messages.receive_message(attrs) do
           {:ok, msg} ->
-            SonarWeb.Endpoint.broadcast("messages:events", "new_message", %{
-              message_id: msg.id,
-              from_peer: from_instance_id,
-              question: msg.question,
-              direction: "inbound",
-              status: msg.status,
-              target_session_id: msg.target_session_id,
-              from_session_id: msg.from_session_id
-            })
+            SonarWeb.Endpoint.broadcast(
+              "messages:events",
+              "new_message",
+              Messages.new_message_event(msg, peer, from_instance_id, message_attrs)
+            )
             conn |> put_status(201) |> json(%{ok: true, message_id: msg.id})
 
           {:error, changeset} ->
@@ -127,6 +130,33 @@ defmodule SonarWeb.MessagesController do
 
   def receive_response(conn, _params) do
     conn |> put_status(400) |> json(%{error: "Missing required fields: from_instance_id, message_id, answer"})
+  end
+
+  # Local endpoint — Sonata's dm_ack handler POSTs here to forward a DM
+  # acknowledgement to the origin peer. Sonar transports it over the relay
+  # (Erlang distribution, HTTP fallback) to that peer.
+  def ack_forward(conn, %{"peer_id" => peer_id, "message_id" => message_id} = params) do
+    acked_at_ms = params["acked_at_ms"] || System.os_time(:millisecond)
+    Messages.send_ack_forward(peer_id, message_id, acked_at_ms)
+    json(conn, %{ok: true, message_id: message_id})
+  end
+
+  def ack_forward(conn, _params) do
+    conn |> put_status(400) |> json(%{error: "missing peer_id or message_id"})
+  end
+
+  # Peer-to-peer HTTP endpoint — the origin peer receives a forwarded ack and
+  # emits an `ack_forward` plugin-webhook event to its local Sonata.
+  def receive_ack(conn, %{"from_instance_id" => _from_instance_id, "message" => %{"message_id" => message_id} = ack}) do
+    SonarWeb.Endpoint.broadcast("messages:events", "ack_forward", %{
+      message_id: message_id,
+      acked_at_ms: ack["acked_at_ms"]
+    })
+    json(conn, %{ok: true})
+  end
+
+  def receive_ack(conn, _params) do
+    conn |> put_status(400) |> json(%{error: "Missing required fields: from_instance_id, message.message_id"})
   end
 
   defp gen_id, do: :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
