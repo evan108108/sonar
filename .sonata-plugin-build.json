@@ -1,0 +1,6 @@
+{
+  "name": "sonar",
+  "kind": "elixir-release",
+  "buildCommand": "MIX_ENV=prod mix release sonar --overwrite",
+  "artifactDir": "_build/prod/rel/sonar"
+}
