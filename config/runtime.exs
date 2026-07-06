@@ -27,8 +27,13 @@ if config_env() == :prod do
     System.get_env("SECRET_KEY_BASE") ||
       :crypto.strong_rand_bytes(64) |> Base.encode64()
 
-  # Bind to 0.0.0.0 when discovery is enabled (peer-to-peer needs network access)
-  bind_ip = if System.get_env("SONAR_DISCOVERY") == "true", do: {0, 0, 0, 0}, else: {127, 0, 0, 1}
+  # Bind to 0.0.0.0 by default — sonar is a peer-to-peer relay, cross-host
+  # HTTP is its whole purpose. Auth is enforced at the request layer (bearer
+  # tokens per the card.json pairing flow); exposing the port to the LAN is
+  # correct for this plugin. SONAR_BIND_LOCAL=true opts back into loopback
+  # only (e.g. for single-host dev/test setups that don't want the port
+  # listening on the LAN).
+  bind_ip = if System.get_env("SONAR_BIND_LOCAL") == "true", do: {127, 0, 0, 1}, else: {0, 0, 0, 0}
 
   config :sonar, SonarWeb.Endpoint,
     http: [ip: bind_ip, port: port],
