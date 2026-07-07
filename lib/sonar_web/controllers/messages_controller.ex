@@ -42,11 +42,14 @@ defmodule SonarWeb.MessagesController do
 
     case Messages.send_message(attrs) do
       {:ok, message} ->
+        # 202 kept for wire compat; `status` now reflects the actual relay
+        # outcome ("relayed" | "failed" | "pending"), not a hardcoded value.
         conn
         |> put_status(202)
         |> json(%{
           message_id: message.id,
-          status: "pending",
+          status: message.status,
+          failure_reason: message.failure_reason,
           poll_url: "/api/messages/#{message.id}"
         })
 
@@ -82,6 +85,8 @@ defmodule SonarWeb.MessagesController do
         conn |> put_status(404) |> json(%{error: "Unknown sender instance"})
 
       peer ->
+        touch_peer_liveness(peer)
+
         attrs =
           message_attrs
           |> Map.merge(%{
@@ -147,7 +152,14 @@ defmodule SonarWeb.MessagesController do
 
   # Peer-to-peer HTTP endpoint — the origin peer receives a forwarded ack and
   # emits an `ack_forward` plugin-webhook event to its local Sonata.
-  def receive_ack(conn, %{"from_instance_id" => _from_instance_id, "message" => %{"message_id" => message_id} = ack}) do
+  def receive_ack(conn, %{"from_instance_id" => from_instance_id, "message" => %{"message_id" => message_id} = ack}) do
+    # Passive liveness — only when the sender matches a known peer. Unknown
+    # instance ids must not nudge peer state (spoof guard).
+    case Sonar.Peers.find_by_instance_id(from_instance_id) do
+      nil -> :ok
+      peer -> touch_peer_liveness(peer)
+    end
+
     SonarWeb.Endpoint.broadcast("messages:events", "ack_forward", %{
       message_id: message_id,
       acked_at_ms: ack["acked_at_ms"]
@@ -157,6 +169,20 @@ defmodule SonarWeb.MessagesController do
 
   def receive_ack(conn, _params) do
     conn |> put_status(400) |> json(%{error: "Missing required fields: from_instance_id, message.message_id"})
+  end
+
+  # Passive liveness: a successfully-matched inbound peer request proves the
+  # peer is reachable right now, even when Discovery isn't running. Refresh
+  # last_seen_at and un-stick a stale "offline" status.
+  defp touch_peer_liveness(peer) do
+    attrs = %{"last_seen_at" => DateTime.utc_now()}
+
+    attrs =
+      if peer.connection_status == "offline",
+        do: Map.put(attrs, "connection_status", "discovered"),
+        else: attrs
+
+    Sonar.Peers.update(peer, attrs)
   end
 
   defp gen_id, do: :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
@@ -170,6 +196,7 @@ defmodule SonarWeb.MessagesController do
       context: message.context,
       answer: message.answer,
       status: message.status,
+      failure_reason: message.failure_reason,
       expires_at: message.expires_at,
       remote_message_id: message.remote_message_id,
       answered_at: message.answered_at,

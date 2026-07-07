@@ -12,6 +12,7 @@ defmodule Sonar.Schema.Message do
     field(:context, :string)
     field(:answer, :string)
     field(:status, :string, default: "pending")
+    field(:failure_reason, :string)
     field(:expires_at, :utc_datetime)
     field(:callback_url, :string)
     field(:remote_message_id, :string)
@@ -34,6 +35,7 @@ defmodule Sonar.Schema.Message do
       :context,
       :answer,
       :status,
+      :failure_reason,
       :expires_at,
       :callback_url,
       :remote_message_id,
@@ -43,7 +45,7 @@ defmodule Sonar.Schema.Message do
     ])
     |> validate_required([:id, :question])
     |> validate_inclusion(:direction, ~w(inbound outbound))
-    |> validate_inclusion(:status, ~w(pending processing answered declined expired))
+    |> validate_inclusion(:status, ~w(pending processing answered declined expired relayed failed))
     |> validate_optional_session_id(:target_session_id)
     |> validate_optional_session_id(:from_session_id)
   end

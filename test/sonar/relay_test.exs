@@ -23,8 +23,11 @@ defmodule Sonar.RelayTest do
           "question" => "What is your architecture?"
         })
 
+      # Test env sets skip_http_relay: true, which counts as a successful
+      # relay — send_message persists the outcome instead of leaving "pending".
       assert msg.direction == "outbound"
-      assert msg.status == "pending"
+      assert msg.status == "relayed"
+      assert msg.failure_reason == nil
       assert msg.question == "What is your architecture?"
     end
 
@@ -72,9 +75,10 @@ defmodule Sonar.RelayTest do
       assert replied.answered_at != nil
     end
 
-    test "relay_available? returns false when Relay is not started" do
-      # In test env, Relay is not started (no SONAR_DISCOVERY=true)
-      assert Process.whereis(Sonar.Relay) == nil
+    test "Relay is started by default (discovery defaults on)" do
+      # Discovery — and with it Sonar.Relay — now starts unless explicitly
+      # disabled via SONAR_DISCOVERY=false / SONAR_DISCOVERY_ENABLED=false.
+      assert Process.whereis(Sonar.Relay) != nil
     end
 
     test "message handler stores inbound from known peer" do

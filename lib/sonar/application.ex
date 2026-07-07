@@ -32,8 +32,12 @@ defmodule Sonar.Application do
     :ok
   end
 
+  # Discovery is on by default; either env var set to exactly "false" opts out.
+  # PluginManager injects SONAR_DISCOVERY_ENABLED; SONAR_DISCOVERY is the
+  # legacy/manual name — honor both.
   defp discovery_enabled? do
-    System.get_env("SONAR_DISCOVERY") == "true"
+    System.get_env("SONAR_DISCOVERY") != "false" and
+      System.get_env("SONAR_DISCOVERY_ENABLED") != "false"
   end
 
   defp discovery_children do

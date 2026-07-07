@@ -16,7 +16,10 @@ defmodule SonarWeb.MessagesControllerTest do
       })
 
     body = json_response(conn, 202)
-    assert body["status"] == "pending"
+    # skip_http_relay: true in test env counts as a successful relay, and the
+    # response now reports the real outcome instead of a hardcoded "pending".
+    assert body["status"] == "relayed"
+    assert body["failure_reason"] == nil
     assert is_binary(body["message_id"])
     assert body["poll_url"] =~ body["message_id"]
   end

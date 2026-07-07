@@ -151,7 +151,7 @@ defmodule Sonar.Discovery do
     peers =
       Sonar.Repo.all(
         from(p in Sonar.Schema.Peer,
-          where: p.connection_status in ["discovered", "paired"],
+          where: p.connection_status in ["discovered", "paired", "offline"],
           where: p.discovery_method == "manual"
         )
       )
@@ -161,7 +161,14 @@ defmodule Sonar.Discovery do
 
       case http_get(url) do
         {:ok, body} ->
-          Sonar.Peers.update(peer, %{"last_seen_at" => DateTime.utc_now()})
+          Sonar.Peers.update(peer, %{
+            "last_seen_at" => DateTime.utc_now(),
+            "connection_status" =>
+              if(peer.connection_status == "offline",
+                do: "discovered",
+                else: peer.connection_status
+              )
+          })
           # Auto-connect via Erlang distribution if relay is running and not already connected
           if Process.whereis(Sonar.Relay) != nil and not Sonar.Relay.connected?(peer.id) do
             node_name = derive_node_name(peer, body)

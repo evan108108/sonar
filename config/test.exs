@@ -28,3 +28,7 @@ config :phoenix, :plug_init_mode, :runtime
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# Point session discovery at a guaranteed-dead port so the "Sonata loopback
+# unreachable" tests are deterministic even when a live Sonata runs on the host.
+config :sonar, sonata_targets_url: "http://127.0.0.1:1/api/dm/targets"
