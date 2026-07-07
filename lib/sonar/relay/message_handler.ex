@@ -24,7 +24,15 @@ defmodule Sonar.Relay.MessageHandler do
         Logger.warning("Sonar Relay: message from unknown instance #{from_instance_id}, ignoring")
 
       peer ->
-        if peer.connection_status in ["paired", "discovered"] do
+        # Reject only revoked peers explicitly. "offline" is a stale-liveness
+        # marker (Discovery hasn't heard back in a while) — a message arriving
+        # is itself proof of life. The previous whitelist of just paired /
+        # discovered silently dropped Erlang-relay messages from offline peers
+        # and logged them as "revoked", which was misleading and led to
+        # confusing missing-message reports.
+        if peer.connection_status == "revoked" do
+          Logger.warning("Sonar Relay: message from revoked peer #{peer.name}, ignoring")
+        else
           attrs =
             Map.merge(message_attrs, %{
               "id" => gen_id(),
@@ -32,6 +40,19 @@ defmodule Sonar.Relay.MessageHandler do
               # Preserve the origin's id (mirrors the HTTP receive path) so the
               # id stays stable across the hop and acks correlate.
               "remote_message_id" => message_attrs["message_id"]
+            })
+
+          # Also apply passive liveness on the Erlang path — an inbound message
+          # is proof the peer is alive right now. Mirrors the HTTP receive
+          # controller's touch_peer_liveness.
+          _ =
+            Sonar.Peers.update(peer, %{
+              "last_seen_at" => DateTime.utc_now(),
+              "connection_status" =>
+                if(peer.connection_status == "offline",
+                  do: "discovered",
+                  else: peer.connection_status
+                )
             })
 
           case Sonar.Messages.receive_message(attrs) do
@@ -46,8 +67,6 @@ defmodule Sonar.Relay.MessageHandler do
             {:error, reason} ->
               Logger.error("Sonar Relay: failed to store message — #{inspect(reason)}")
           end
-        else
-          Logger.warning("Sonar Relay: message from revoked peer #{peer.name}, ignoring")
         end
     end
 
