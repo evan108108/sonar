@@ -176,8 +176,34 @@ defmodule Sonar.Discovery do
           end
 
         {:error, _} ->
-          Sonar.Peers.update(peer, %{"connection_status" => "offline"})
+          # Only clobber to offline if we ALSO haven't seen the peer via
+          # passive-liveness (an inbound message on any transport) recently.
+          # An active probe can fail transiently — BEAM :httpc has been
+          # observed returning :ehostunreach against hosts that curl reaches
+          # fine, likely due to source-address selection differences after
+          # Erlang distribution comes up. Passive-liveness from
+          # receive_message / receive_response / :sonar_message /
+          # :sonar_response is authoritative: if a message arrived recently,
+          # the peer IS reachable in the direction that matters (peer → us),
+          # even if our probe (us → peer) is temporarily broken.
+          if not_recently_seen?(peer) do
+            Sonar.Peers.update(peer, %{"connection_status" => "offline"})
+          end
       end
+    end
+  end
+
+  # Passive-liveness grace window — a peer whose last_seen_at is fresher than
+  # this is considered "still alive" even when an active probe fails.
+  @passive_liveness_grace_seconds 180
+
+  defp not_recently_seen?(peer) do
+    case peer.last_seen_at do
+      nil ->
+        true
+
+      %DateTime{} = seen ->
+        DateTime.diff(DateTime.utc_now(), seen, :second) > @passive_liveness_grace_seconds
     end
   end
 
