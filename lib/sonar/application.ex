@@ -34,10 +34,18 @@ defmodule Sonar.Application do
 
   # Discovery is on by default; either env var set to exactly "false" opts out.
   # PluginManager injects SONAR_DISCOVERY_ENABLED; SONAR_DISCOVERY is the
-  # legacy/manual name — honor both.
+  # legacy/manual name — honor both. `config :sonar, :discovery_enabled`
+  # takes precedence for test env (Discovery hits DB and would crash
+  # Ecto SQL Sandbox's :manual ownership without checkout).
   defp discovery_enabled? do
-    System.get_env("SONAR_DISCOVERY") != "false" and
-      System.get_env("SONAR_DISCOVERY_ENABLED") != "false"
+    case Application.get_env(:sonar, :discovery_enabled) do
+      nil ->
+        System.get_env("SONAR_DISCOVERY") != "false" and
+          System.get_env("SONAR_DISCOVERY_ENABLED") != "false"
+
+      configured ->
+        configured == true
+    end
   end
 
   defp discovery_children do

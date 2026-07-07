@@ -75,10 +75,13 @@ defmodule Sonar.RelayTest do
       assert replied.answered_at != nil
     end
 
-    test "Relay is started by default (discovery defaults on)" do
-      # Discovery — and with it Sonar.Relay — now starts unless explicitly
-      # disabled via SONAR_DISCOVERY=false / SONAR_DISCOVERY_ENABLED=false.
-      assert Process.whereis(Sonar.Relay) != nil
+    test "Relay is NOT started in test env (discovery_enabled: false override)" do
+      # Discovery defaults to on in prod, but test env sets
+      # `config :sonar, :discovery_enabled, false` so the Discovery/Relay
+      # supervisor tree stays out of Ecto SQL Sandbox's :manual ownership.
+      # Prod-shaped assertion "started by default" is exercised by the
+      # deploy sanity checks, not this suite.
+      assert Process.whereis(Sonar.Relay) == nil
     end
 
     test "message handler stores inbound from known peer" do

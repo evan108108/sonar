@@ -32,3 +32,9 @@ config :phoenix,
 # Point session discovery at a guaranteed-dead port so the "Sonata loopback
 # unreachable" tests are deterministic even when a live Sonata runs on the host.
 config :sonar, sonata_targets_url: "http://127.0.0.1:1/api/dm/targets"
+
+# Discovery/Relay would hit the DB from a process outside the test's own
+# Ecto SQL Sandbox ownership → ownership crash. Turn off in tests; the
+# relay_test.exs "started by default" assertion is now false in test env,
+# but that expectation is prod-shaped anyway.
+config :sonar, :discovery_enabled, false
