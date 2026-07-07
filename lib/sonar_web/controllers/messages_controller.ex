@@ -116,7 +116,16 @@ defmodule SonarWeb.MessagesController do
 
   # HTTP peer-to-peer response delivery
   # Uses update_answer directly (not reply/2) to avoid re-relaying the response back
-  def receive_response(conn, %{"from_instance_id" => _from_instance_id, "message_id" => message_id, "answer" => answer}) do
+  def receive_response(conn, %{"from_instance_id" => from_instance_id, "message_id" => message_id, "answer" => answer}) do
+    # Passive liveness — same guard as receive_message/receive_ack. A response
+    # arriving is proof of life. Unknown senders do NOT nudge state (spoof
+    # guard); we still proceed to look up the local message row since the
+    # audit key is `message_id` on our side.
+    case Sonar.Peers.find_by_instance_id(from_instance_id) do
+      nil -> :ok
+      peer -> touch_peer_liveness(peer)
+    end
+
     case Messages.get(message_id) do
       nil ->
         conn |> put_status(404) |> json(%{error: "Message not found"})

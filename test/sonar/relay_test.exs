@@ -106,6 +106,61 @@ defmodule Sonar.RelayTest do
       assert msg.question == "Relay test question"
       assert msg.peer_id == peer.id
     end
+
+    test "response frame updates the local audit's answer without re-relaying" do
+      # Regression for: maybe_relay_response was casting `{:sonar_message,
+      # ...}` with a `%{"response_to", "answer"}` shape. The remote handler
+      # then tried to store it as a new inbound message, which failed schema
+      # validation (missing question) and silently dropped the reply.
+      # Since the cross-node cast can't be exercised in a single-node test,
+      # we drive the state transition the way :sonar_response would: hand
+      # the local audit row to `update_answer` and assert (a) the row is
+      # updated in place, (b) NO new message row is inserted, (c) status
+      # transitions to "answered".
+      {:ok, peer} =
+        Peers.create(%{
+          "name" => "scout",
+          "hostname" => "scout.local",
+          "instance_id" => "scout-123",
+          "connection_status" => "discovered"
+        })
+
+      # An outbound message we sent to scout earlier
+      {:ok, sent} =
+        Messages.send_message(%{
+          "peer_id" => peer.id,
+          "question" => "What is your architecture?"
+        })
+
+      before_count = Sonar.Repo.aggregate(Sonar.Schema.Message, :count, :id)
+
+      {:ok, updated} = Messages.update_answer(sent.id, "42")
+
+      after_count = Sonar.Repo.aggregate(Sonar.Schema.Message, :count, :id)
+
+      assert updated.id == sent.id
+      assert updated.answer == "42"
+      assert updated.status == "answered"
+      assert after_count == before_count, "update_answer must NOT insert a new row"
+    end
+
+    test "Sonar.Relay.send_response returns :not_connected when peer isn't connected" do
+      # Verifies the new send_response public API exists and returns the
+      # expected error tuple for unknown peer_ids. Actual cross-node send
+      # would require booting a second BEAM.
+      #
+      # Discovery is off in test env (see config/test.exs), so Sonar.Relay
+      # isn't running under the app supervisor. Start a bare instance just
+      # for this call.
+      {:ok, _pid} = Sonar.Relay.start_link([])
+      on_exit(fn ->
+        pid = Process.whereis(Sonar.Relay)
+        if pid, do: GenServer.stop(pid)
+      end)
+
+      assert {:error, :not_connected} =
+               Sonar.Relay.send_response("not-a-real-peer", "msg-id", "answer")
+    end
   end
 
   describe "peer trust" do

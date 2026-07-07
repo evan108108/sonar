@@ -77,12 +77,32 @@ defmodule Sonar.Relay.MessageHandler do
   def handle_cast({:sonar_response, from_instance_id, message_id, answer}, state) do
     Logger.info("Sonar Relay: received response for message #{message_id}")
 
+    # Passive liveness — a response arriving is proof the peer is alive.
+    # Mirrors the :sonar_message path and the HTTP receive controller.
+    case Sonar.Peers.find_by_instance_id(from_instance_id) do
+      nil -> :ok
+      peer ->
+        _ =
+          Sonar.Peers.update(peer, %{
+            "last_seen_at" => DateTime.utc_now(),
+            "connection_status" =>
+              if(peer.connection_status == "offline",
+                do: "discovered",
+                else: peer.connection_status
+              )
+          })
+    end
+
     case Sonar.Messages.get(message_id) do
       nil ->
         Logger.warning("Sonar Relay: response for unknown message #{message_id}")
 
       message ->
-        case Sonar.Messages.reply(message, answer) do
+        # `update_answer` (not `reply`) — the local audit gets the answer, but
+        # DO NOT re-invoke `maybe_relay_response`, which would loop by casting
+        # the same response back to the origin peer. Mirrors the HTTP path in
+        # MessagesController.receive_response.
+        case Sonar.Messages.update_answer(message.id, answer) do
           {:ok, _updated} ->
             SonarWeb.Endpoint.broadcast("messages:events", "reply_received", %{message_id: message_id, from_peer: from_instance_id, answer: answer})
           {:error, _} -> :ok

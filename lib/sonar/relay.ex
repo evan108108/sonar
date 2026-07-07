@@ -21,6 +21,21 @@ defmodule Sonar.Relay do
     GenServer.call(__MODULE__, {:send_message, peer_id, message_attrs})
   end
 
+  @doc """
+  Send a RESPONSE to a peer via Erlang distribution. Casts a `:sonar_response`
+  frame that the remote MessageHandler routes into `update_answer`, not
+  `receive_message`. Prior to this, `maybe_relay_response` was calling
+  `send_message` with a `%{"response_to", "answer"}` shape — arriving as a
+  new inbound message with an `answer` but no `question`, so the changeset
+  failed `validate_required([:id, :question])` and the reply was silently
+  dropped. Only the HTTP fallback (`/api/messages/receive_response`) was
+  routing responses correctly, so the bug hid whenever Erlang distribution
+  wasn't connected between the two nodes.
+  """
+  def send_response(peer_id, message_id, answer) do
+    GenServer.call(__MODULE__, {:send_response, peer_id, message_id, answer})
+  end
+
   @doc "Forward a DM acknowledgement to a peer via Erlang distribution"
   def send_ack(peer_id, ack_attrs) do
     GenServer.call(__MODULE__, {:send_ack, peer_id, ack_attrs})
@@ -57,6 +72,24 @@ defmodule Sonar.Relay do
       node_name ->
         identity = Sonar.Identity.get()
         payload = {:sonar_message, identity.instance_id, message_attrs}
+
+        try do
+          GenServer.cast({Sonar.Relay.MessageHandler, node_name}, payload)
+          {:reply, :ok, state}
+        rescue
+          e -> {:reply, {:error, e}, state}
+        end
+    end
+  end
+
+  def handle_call({:send_response, peer_id, message_id, answer}, _from, state) do
+    case Map.get(state.connected_peers, peer_id) do
+      nil ->
+        {:reply, {:error, :not_connected}, state}
+
+      node_name ->
+        identity = Sonar.Identity.get()
+        payload = {:sonar_response, identity.instance_id, message_id, answer}
 
         try do
           GenServer.cast({Sonar.Relay.MessageHandler, node_name}, payload)

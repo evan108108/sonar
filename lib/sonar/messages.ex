@@ -214,14 +214,15 @@ defmodule Sonar.Messages do
     if message.peer_id != nil && message.answer != nil do
       # Use remote_message_id if available (the sender's original message ID)
       response_to = message.remote_message_id || message.id
-      payload = %{
-        "response_to" => response_to,
-        "answer" => message.answer
-      }
 
       relayed =
         if relay_available?() do
-          case Sonar.Relay.send_message(message.peer_id, payload) do
+          # Route as a `:sonar_response` frame — NOT `send_message`. The old
+          # code was casting a `%{"response_to", "answer"}` map through the
+          # `:sonar_message` handler, which then failed the changeset's
+          # `validate_required([:id, :question])` and silently discarded the
+          # reply. See Sonar.Relay.send_response docstring.
+          case Sonar.Relay.send_response(message.peer_id, response_to, message.answer) do
             :ok -> true
             _ -> false
           end
