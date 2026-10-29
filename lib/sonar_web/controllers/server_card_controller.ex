@@ -29,10 +29,20 @@ defmodule SonarWeb.ServerCardController do
     |> json(card)
   end
 
-  # Advertise the host the caller actually reached us on plus the bound
-  # port. SonarWeb.Endpoint.url/0 is built from config (host "localhost"),
-  # which is useless to a remote peer.
+  # Advertise where remote peers should reach us. SONAR_PUBLIC_HOST (e.g. a
+  # Tailscale hostname or public DNS name) wins when set — the host the
+  # caller used may be LAN-only or a loopback name that doesn't route from
+  # other networks. Falls back to conn.host, which at least matches however
+  # the current caller got here. SonarWeb.Endpoint.url/0 (config host
+  # "localhost") is useless to a remote peer, so we never use it.
   defp endpoint_url(conn) do
-    "http://#{conn.host}:#{Sonar.PortFile.bound_port()}"
+    host =
+      case System.get_env("SONAR_PUBLIC_HOST") do
+        nil -> conn.host
+        "" -> conn.host
+        public -> public
+      end
+
+    "http://#{host}:#{Sonar.PortFile.bound_port()}"
   end
 end

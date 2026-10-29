@@ -44,4 +44,48 @@ defmodule SonarWeb.ServerCardControllerTest do
     conn = get(conn, "/.well-known/sonar/card.json")
     assert get_resp_header(conn, "cache-control") == ["public, max-age=3600"]
   end
+
+  describe "SONAR_PUBLIC_HOST override" do
+    setup do
+      prior = System.get_env("SONAR_PUBLIC_HOST")
+
+      on_exit(fn ->
+        case prior do
+          nil -> System.delete_env("SONAR_PUBLIC_HOST")
+          val -> System.put_env("SONAR_PUBLIC_HOST", val)
+        end
+      end)
+
+      :ok
+    end
+
+    test "advertises SONAR_PUBLIC_HOST when set", %{conn: conn} do
+      System.put_env("SONAR_PUBLIC_HOST", "evans-macbook-pro.tail079090.ts.net")
+      conn = get(conn, "/.well-known/sonar/card.json")
+      body = json_response(conn, 200)
+      port = body["transport"]["port"]
+
+      assert body["transport"]["endpoint"] ==
+               "http://evans-macbook-pro.tail079090.ts.net:#{port}"
+    end
+
+    test "empty SONAR_PUBLIC_HOST falls back to conn.host", %{conn: conn} do
+      System.put_env("SONAR_PUBLIC_HOST", "")
+      conn = get(conn, "/.well-known/sonar/card.json")
+      body = json_response(conn, 200)
+      port = body["transport"]["port"]
+
+      refute String.starts_with?(body["transport"]["endpoint"], "http://:")
+      assert String.ends_with?(body["transport"]["endpoint"], ":#{port}")
+    end
+
+    test "unset SONAR_PUBLIC_HOST falls back to conn.host", %{conn: conn} do
+      System.delete_env("SONAR_PUBLIC_HOST")
+      conn = get(conn, "/.well-known/sonar/card.json")
+      body = json_response(conn, 200)
+      port = body["transport"]["port"]
+
+      assert String.ends_with?(body["transport"]["endpoint"], ":#{port}")
+    end
+  end
 end
