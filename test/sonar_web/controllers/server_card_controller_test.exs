@@ -23,6 +23,8 @@ defmodule SonarWeb.ServerCardControllerTest do
     assert is_map(body["transport"])
     assert body["transport"]["type"] == "http"
     assert is_binary(body["transport"]["endpoint"])
+    assert is_integer(body["transport"]["port"])
+    assert String.ends_with?(body["transport"]["endpoint"], ":#{body["transport"]["port"]}")
 
     assert is_map(body["authentication"])
     assert body["authentication"]["type"] == "bearer"

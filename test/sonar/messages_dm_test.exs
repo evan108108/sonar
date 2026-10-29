@@ -18,8 +18,19 @@ defmodule Sonar.MessagesDMTest do
 
   describe "Messages.send_message/1 with DM keys" do
     setup do
+      # Both the setup and the on-exit restore preserve whatever the surrounding
+      # env had, instead of hardcoding false — the hardcoded false was leaking
+      # `skip_http_relay=false` across test files and turning subsequent send
+      # tests into real HTTP attempts (which then fail because Discovery/Relay
+      # is off in test env, so nothing intercepts).
+      prior = Application.get_env(:sonar, :skip_http_relay)
       Application.put_env(:sonar, :skip_http_relay, true)
-      on_exit(fn -> Application.put_env(:sonar, :skip_http_relay, false) end)
+      on_exit(fn ->
+        case prior do
+          nil -> Application.delete_env(:sonar, :skip_http_relay)
+          val -> Application.put_env(:sonar, :skip_http_relay, val)
+        end
+      end)
 
       {:ok, peer} =
         Peers.create(%{

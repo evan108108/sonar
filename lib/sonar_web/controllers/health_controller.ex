@@ -7,7 +7,8 @@ defmodule SonarWeb.HealthController do
       app: "sonar",
       version: Application.spec(:sonar, :vsn) |> to_string(),
       uptime: System.monotonic_time(:second),
-      node: Node.self() |> to_string()
+      node: Node.self() |> to_string(),
+      port: Sonar.PortFile.bound_port()
     })
   end
 end

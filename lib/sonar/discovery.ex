@@ -2,7 +2,7 @@ defmodule Sonar.Discovery do
   @moduledoc """
   mDNS/DNS-SD discovery for finding Sonar peers on the local network.
   Advertises this instance as `_sonar._tcp` and browses for other instances.
-  Only starts when SONAR_DISCOVERY=true.
+  Peer liveness checks live in `Sonar.PeerHealth`, which runs without mDNS.
   """
 
   use GenServer
@@ -14,10 +14,13 @@ defmodule Sonar.Discovery do
 
   @service_type "_sonar._tcp.local"
   @query_interval 15_000
-  @health_interval 60_000
+  @client_restart_min_ms 1_000
+  @client_restart_max_ms 300_000
 
   defmodule State do
-    defstruct [:identity, :port, started: false]
+    # client_ref monitors Mdns.Client. It's nil while the client is down or
+    # has no socket, and queries are skipped until a restart succeeds.
+    defstruct [:identity, :port, :client_ref, started: false, restart_ms: 1_000]
   end
 
   def start_link(opts) do
@@ -26,7 +29,7 @@ defmodule Sonar.Discovery do
 
   def init(_opts) do
     identity = Sonar.Identity.get()
-    port = Application.get_env(:sonar, SonarWeb.Endpoint)[:http][:port] || 4000
+    port = Sonar.PortFile.bound_port()
 
     # Start advertising and browsing
     send(self(), :start_mdns)
@@ -46,37 +49,47 @@ defmodule Sonar.Discovery do
       type: :ptr
     })
 
-    # Start the mdns client for browsing
-    Mdns.Client.start()
-
     # Subscribe to discovery events (registers this process to receive mDNS messages)
     Mdns.EventManager.add_handler()
 
+    state = start_client(%{state | started: true})
+
     # Start periodic queries
     send(self(), :query_peers)
-    # Run first health check quickly (3s) to auto-connect known peers
-    Process.send_after(self(), :health_check, 3_000)
 
     Logger.info(
       "Sonar Discovery: advertising as sonar-#{state.identity.name} on #{@service_type}"
     )
 
-    {:noreply, %{state | started: true}}
+    {:noreply, state}
   end
 
   def handle_info(:query_peers, state) do
-    if state.started do
+    # Mdns.Client.query/1 is a cast that crashes the client when its socket
+    # is nil, so only query while the monitored client has one.
+    if state.started and state.client_ref != nil do
       Mdns.Client.query(@service_type)
-      Process.send_after(self(), :query_peers, @query_interval)
     end
 
+    if state.started, do: Process.send_after(self(), :query_peers, @query_interval)
     {:noreply, state}
   end
 
-  def handle_info(:health_check, state) do
-    check_peer_health()
-    schedule_health_check()
-    {:noreply, state}
+  # Mdns.Client went down. Its supervisor restarts it with an empty state
+  # (udp: nil), and nothing calls start/1 again — before this, every later
+  # query crashed it again, every 15s, indefinitely. Re-open the socket
+  # after a backoff.
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %State{client_ref: ref} = state) do
+    Logger.warning(
+      "Sonar Discovery: mDNS client down (#{inspect(reason)}); restarting in #{state.restart_ms}ms"
+    )
+
+    Process.send_after(self(), :restart_client, state.restart_ms)
+    {:noreply, %{state | client_ref: nil}}
+  end
+
+  def handle_info(:restart_client, state) do
+    {:noreply, start_client(state)}
   end
 
   # mDNS discovery event — {service_type, device}
@@ -90,13 +103,36 @@ defmodule Sonar.Discovery do
     {:noreply, state}
   end
 
+  # Opens the client's socket and monitors it. On failure, retries with
+  # exponential backoff (capped) instead of letting queries crash it.
+  defp start_client(state) do
+    with pid when is_pid(pid) <- Process.whereis(Mdns.Client),
+         :ok <- safe_client_start() do
+      %{state | client_ref: Process.monitor(pid), restart_ms: @client_restart_min_ms}
+    else
+      failure ->
+        Logger.warning(
+          "Sonar Discovery: mDNS client start failed (#{inspect(failure)}); retrying in #{state.restart_ms}ms"
+        )
+
+        Process.send_after(self(), :restart_client, state.restart_ms)
+        %{state | client_ref: nil, restart_ms: min(state.restart_ms * 2, @client_restart_max_ms)}
+    end
+  end
+
+  defp safe_client_start do
+    Mdns.Client.start()
+  catch
+    :exit, reason -> {:error, reason}
+  end
+
   defp handle_peer_discovered(device, my_identity) do
     # Don't discover ourselves
     hostname = to_string(device.domain || device.ip |> :inet.ntoa() |> to_string())
 
     if hostname != "" do
       instance_id = device.payload["id"]
-      port = parse_port(device.payload["port"]) || device.port || 8400
+      port = parse_port(device.payload["port"]) || device.port || 4001
 
       # Skip if this is our own instance
       if instance_id != my_identity.instance_id do
@@ -145,61 +181,6 @@ defmodule Sonar.Discovery do
     end
   end
 
-  defp check_peer_health do
-    import Ecto.Query
-
-    peers =
-      Sonar.Repo.all(
-        from(p in Sonar.Schema.Peer,
-          where: p.connection_status in ["discovered", "paired"],
-          where: p.discovery_method == "manual"
-        )
-      )
-
-    for peer <- peers do
-      url = "http://#{peer.hostname}:#{peer.port}/api/health"
-
-      case http_get(url) do
-        {:ok, body} ->
-          Sonar.Peers.update(peer, %{"last_seen_at" => DateTime.utc_now()})
-          # Auto-connect via Erlang distribution if relay is running and not already connected
-          if Process.whereis(Sonar.Relay) != nil and not Sonar.Relay.connected?(peer.id) do
-            node_name = derive_node_name(peer, body)
-            if node_name, do: Sonar.Relay.connect_peer(peer.id, node_name)
-          end
-
-        {:error, _} ->
-          Sonar.Peers.update(peer, %{"connection_status" => "offline"})
-      end
-    end
-  end
-
-  defp http_get(url) do
-    try do
-      uri = URI.parse(url)
-      host = to_charlist(uri.host)
-      port = uri.port || 80
-      path = to_charlist(uri.path || "/")
-
-      case :httpc.request(:get, {~c"http://#{host}:#{port}#{path}", []}, [timeout: 5000], []) do
-        {:ok, {{_, 200, _}, _, body}} -> {:ok, to_string(body)}
-        _ -> {:error, :unhealthy}
-      end
-    rescue
-      _ -> {:error, :unreachable}
-    end
-  end
-
-  # Derive the Erlang node name from a peer's health response or hostname.
-  # The health endpoint returns {"node": "sonar@Mac", ...} — use that directly.
-  # Falls back to "sonar@<hostname>" if node isn't in the response.
-  defp derive_node_name(peer, health_body) do
-    case Jason.decode(health_body) do
-      {:ok, %{"node" => node}} when is_binary(node) and node != "nonode@nohost" -> node
-      _ -> "sonar@#{peer.hostname}"
-    end
-  end
-
   defp get_local_ip do
     case :inet.getif() do
       {:ok, addrs} ->
@@ -211,10 +192,6 @@ defmodule Sonar.Discovery do
       _ ->
         {0, 0, 0, 0}
     end
-  end
-
-  defp schedule_health_check do
-    Process.send_after(self(), :health_check, @health_interval)
   end
 
   defp parse_port(nil), do: nil

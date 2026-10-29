@@ -18,7 +18,7 @@ defmodule Sonar.Sessions do
 
   require Logger
 
-  @sonata_targets_url "http://127.0.0.1:3211/api/dm/targets"
+  @default_sonata_targets_url "http://127.0.0.1:3211/api/dm/targets"
   @local_timeout_ms 2_000
   @remote_timeout_ms 5_000
 
@@ -29,7 +29,7 @@ defmodule Sonar.Sessions do
   returns `{:ok, %{sessions: [], queried_at: ms}}` and logs a warning.
   """
   def list_local do
-    case http_get(@sonata_targets_url, @local_timeout_ms) do
+    case http_get(sonata_targets_url(), @local_timeout_ms) do
       {:ok, body} ->
         case Jason.decode(body) do
           {:ok, %{"targets" => targets} = decoded} ->
@@ -105,6 +105,13 @@ defmodule Sonar.Sessions do
   end
 
   # ---- internal ----
+
+  # Overridable so the test env can point at a guaranteed-dead port — the
+  # "loopback unreachable" tests must not depend on whether a live Sonata
+  # happens to be running on the host.
+  defp sonata_targets_url do
+    Application.get_env(:sonar, :sonata_targets_url, @default_sonata_targets_url)
+  end
 
   # Handles both the `dm_targets` shape (name/kind/sessionKey/workerId/peerId)
   # and the peer `/api/sessions/local` shape (session_id/session_label/role).

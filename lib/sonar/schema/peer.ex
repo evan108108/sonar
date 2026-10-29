@@ -7,7 +7,7 @@ defmodule Sonar.Schema.Peer do
   schema "peers" do
     field(:name, :string)
     field(:hostname, :string)
-    field(:port, :integer, default: 8400)
+    field(:port, :integer, default: 4001)
     field(:instance_id, :string)
     field(:cert_fingerprint, :string)
     field(:discovery_method, :string, default: "manual")

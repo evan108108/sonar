@@ -44,16 +44,36 @@ defmodule Sonar.Messages do
       )
       |> Repo.insert()
 
-    # Attempt delivery via Erlang distribution if peer is connected
+    # Attempt delivery (Erlang distribution, HTTP fallback) and persist the
+    # outcome — "relayed" or "failed" — instead of leaving the row "pending".
     case result do
       {:ok, message} ->
-        maybe_relay_message(message, extras)
-        {:ok, message}
+        case maybe_relay_message(message, extras) do
+          :relayed -> {:ok, mark_relay_outcome(message, "relayed", nil)}
+          {:error, reason} -> {:ok, mark_relay_outcome(message, "failed", reason)}
+          :no_peer -> {:ok, message}
+        end
 
       error ->
         error
     end
   end
+
+  # Persist the relay outcome on the message row. Returns the updated message,
+  # or the original if the update itself fails (outcome reporting must not
+  # turn a delivered/attempted send into a 422).
+  defp mark_relay_outcome(message, status, reason) do
+    attrs = %{"status" => status, "failure_reason" => format_reason(reason)}
+
+    case message |> Message.changeset(attrs) |> Repo.update() do
+      {:ok, updated} -> updated
+      {:error, _} -> message
+    end
+  end
+
+  defp format_reason(nil), do: nil
+  defp format_reason(reason) when is_binary(reason), do: reason
+  defp format_reason(reason), do: inspect(reason)
 
   def reply(message, answer) do
     result =
@@ -150,6 +170,8 @@ defmodule Sonar.Messages do
     :ok
   end
 
+  # Returns :relayed when either transport delivered, {:error, reason} when
+  # both failed, or :no_peer for peer-less messages (nothing to relay).
   defp maybe_relay_message(message, extras) do
     if message.peer_id != nil do
       payload = %{
@@ -175,7 +197,16 @@ defmodule Sonar.Messages do
           false
         end
 
-      unless relayed, do: http_relay_message(message.peer_id, payload)
+      if relayed do
+        :relayed
+      else
+        case http_relay_message(message.peer_id, payload) do
+          :ok -> :relayed
+          {:error, reason} -> {:error, reason}
+        end
+      end
+    else
+      :no_peer
     end
   end
 
@@ -183,14 +214,15 @@ defmodule Sonar.Messages do
     if message.peer_id != nil && message.answer != nil do
       # Use remote_message_id if available (the sender's original message ID)
       response_to = message.remote_message_id || message.id
-      payload = %{
-        "response_to" => response_to,
-        "answer" => message.answer
-      }
 
       relayed =
         if relay_available?() do
-          case Sonar.Relay.send_message(message.peer_id, payload) do
+          # Route as a `:sonar_response` frame — NOT `send_message`. The old
+          # code was casting a `%{"response_to", "answer"}` map through the
+          # `:sonar_message` handler, which then failed the changeset's
+          # `validate_required([:id, :question])` and silently discarded the
+          # reply. See Sonar.Relay.send_response docstring.
+          case Sonar.Relay.send_response(message.peer_id, response_to, message.answer) do
             :ok -> true
             _ -> false
           end
@@ -216,7 +248,7 @@ defmodule Sonar.Messages do
         peer ->
           identity = Sonar.Identity.get()
           url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive"
-          body = Jason.encode!(%{from_instance_id: identity.instance_id, message: payload})
+          body = Jason.encode!(%{from_instance_id: identity.instance_id, from_port: Sonar.PortFile.bound_port(), message: payload})
           http_post(url, body)
       end
     end
@@ -231,7 +263,7 @@ defmodule Sonar.Messages do
         peer ->
           identity = Sonar.Identity.get()
           url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive_response"
-          body = Jason.encode!(%{from_instance_id: identity.instance_id, message_id: message_id, answer: answer})
+          body = Jason.encode!(%{from_instance_id: identity.instance_id, from_port: Sonar.PortFile.bound_port(), message_id: message_id, answer: answer})
           http_post(url, body)
       end
     end
@@ -248,7 +280,7 @@ defmodule Sonar.Messages do
         peer ->
           identity = Sonar.Identity.get()
           url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive_ack"
-          body = Jason.encode!(%{from_instance_id: identity.instance_id, message: payload})
+          body = Jason.encode!(%{from_instance_id: identity.instance_id, from_port: Sonar.PortFile.bound_port(), message: payload})
           http_post(url, body)
       end
     end

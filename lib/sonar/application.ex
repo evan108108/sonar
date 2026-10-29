@@ -9,18 +9,22 @@ defmodule Sonar.Application do
 
     # Auto-migrate on startup (safe for SQLite, idempotent)
     # Skip Migrator in test — test_helper.exs handles migrations
-    migrator = if Application.get_env(:sonar, :skip_migrator), do: [], else: [{Sonar.Migrator, []}]
+    migrator =
+      if Application.get_env(:sonar, :skip_migrator), do: [], else: [{Sonar.Migrator, []}]
 
     children =
       [
         SonarWeb.Telemetry,
         Sonar.Repo
-      ] ++ migrator ++ [
-        {DNSCluster, query: Application.get_env(:sonar, :dns_cluster_query) || :ignore},
-        {Phoenix.PubSub, name: Sonar.PubSub},
-        Sonar.Identity,
-        SonarWeb.Endpoint
-      ] ++ discovery_children()
+      ] ++
+        migrator ++
+        [
+          {DNSCluster, query: Application.get_env(:sonar, :dns_cluster_query) || :ignore},
+          {Phoenix.PubSub, name: Sonar.PubSub},
+          Sonar.Identity,
+          SonarWeb.Endpoint,
+          Sonar.PortFile
+        ] ++ peer_health_children() ++ discovery_children()
 
     opts = [strategy: :one_for_one, name: Sonar.Supervisor]
     Supervisor.start_link(children, opts)
@@ -32,8 +36,28 @@ defmodule Sonar.Application do
     :ok
   end
 
+  # Discovery is on by default; either env var set to exactly "false" opts out.
+  # PluginManager injects SONAR_DISCOVERY_ENABLED; SONAR_DISCOVERY is the
+  # legacy/manual name — honor both. `config :sonar, :discovery_enabled`
+  # takes precedence for test env (Discovery hits DB and would crash
+  # Ecto SQL Sandbox's :manual ownership without checkout).
   defp discovery_enabled? do
-    System.get_env("SONAR_DISCOVERY") == "true"
+    case Application.get_env(:sonar, :discovery_enabled) do
+      nil ->
+        System.get_env("SONAR_DISCOVERY") != "false" and
+          System.get_env("SONAR_DISCOVERY_ENABLED") != "false"
+
+      configured ->
+        configured == true
+    end
+  end
+
+  # Peer liveness runs regardless of discovery: it is also what bootstraps
+  # Erlang distribution to manual peers (Relay.connect_peer needs the node
+  # name from /api/health). Off in test, where it would hit the DB outside
+  # the SQL Sandbox.
+  defp peer_health_children do
+    if Application.get_env(:sonar, :peer_health_enabled, true), do: [Sonar.PeerHealth], else: []
   end
 
   defp discovery_children do
