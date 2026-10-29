@@ -248,7 +248,7 @@ defmodule Sonar.Messages do
         peer ->
           identity = Sonar.Identity.get()
           url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive"
-          body = Jason.encode!(%{from_instance_id: identity.instance_id, message: payload})
+          body = Jason.encode!(%{from_instance_id: identity.instance_id, from_port: Sonar.PortFile.bound_port(), message: payload})
           http_post(url, body)
       end
     end
@@ -263,7 +263,7 @@ defmodule Sonar.Messages do
         peer ->
           identity = Sonar.Identity.get()
           url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive_response"
-          body = Jason.encode!(%{from_instance_id: identity.instance_id, message_id: message_id, answer: answer})
+          body = Jason.encode!(%{from_instance_id: identity.instance_id, from_port: Sonar.PortFile.bound_port(), message_id: message_id, answer: answer})
           http_post(url, body)
       end
     end
@@ -280,7 +280,7 @@ defmodule Sonar.Messages do
         peer ->
           identity = Sonar.Identity.get()
           url = "http://#{peer.hostname}:#{peer.port}/api/messages/receive_ack"
-          body = Jason.encode!(%{from_instance_id: identity.instance_id, message: payload})
+          body = Jason.encode!(%{from_instance_id: identity.instance_id, from_port: Sonar.PortFile.bound_port(), message: payload})
           http_post(url, body)
       end
     end

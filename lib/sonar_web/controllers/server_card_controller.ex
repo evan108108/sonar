@@ -15,7 +15,8 @@ defmodule SonarWeb.ServerCardController do
       capabilities: identity.capabilities,
       transport: %{
         type: "http",
-        endpoint: SonarWeb.Endpoint.url()
+        endpoint: endpoint_url(conn),
+        port: Sonar.PortFile.bound_port()
       },
       authentication: %{
         type: "bearer",
@@ -26,5 +27,12 @@ defmodule SonarWeb.ServerCardController do
     conn
     |> put_resp_header("cache-control", "public, max-age=3600")
     |> json(card)
+  end
+
+  # Advertise the host the caller actually reached us on plus the bound
+  # port. SonarWeb.Endpoint.url/0 is built from config (host "localhost"),
+  # which is useless to a remote peer.
+  defp endpoint_url(conn) do
+    "http://#{conn.host}:#{Sonar.PortFile.bound_port()}"
   end
 end

@@ -38,3 +38,7 @@ config :sonar, sonata_targets_url: "http://127.0.0.1:1/api/dm/targets"
 # relay_test.exs "started by default" assertion is now false in test env,
 # but that expectation is prod-shaped anyway.
 config :sonar, :discovery_enabled, false
+
+# PeerHealth polls peers from outside the test's Sandbox ownership, same as
+# Discovery. Tests call Sonar.PeerHealth.check_peer/2 directly instead.
+config :sonar, :peer_health_enabled, false

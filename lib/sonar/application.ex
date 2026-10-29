@@ -9,18 +9,22 @@ defmodule Sonar.Application do
 
     # Auto-migrate on startup (safe for SQLite, idempotent)
     # Skip Migrator in test — test_helper.exs handles migrations
-    migrator = if Application.get_env(:sonar, :skip_migrator), do: [], else: [{Sonar.Migrator, []}]
+    migrator =
+      if Application.get_env(:sonar, :skip_migrator), do: [], else: [{Sonar.Migrator, []}]
 
     children =
       [
         SonarWeb.Telemetry,
         Sonar.Repo
-      ] ++ migrator ++ [
-        {DNSCluster, query: Application.get_env(:sonar, :dns_cluster_query) || :ignore},
-        {Phoenix.PubSub, name: Sonar.PubSub},
-        Sonar.Identity,
-        SonarWeb.Endpoint
-      ] ++ discovery_children()
+      ] ++
+        migrator ++
+        [
+          {DNSCluster, query: Application.get_env(:sonar, :dns_cluster_query) || :ignore},
+          {Phoenix.PubSub, name: Sonar.PubSub},
+          Sonar.Identity,
+          SonarWeb.Endpoint,
+          Sonar.PortFile
+        ] ++ peer_health_children() ++ discovery_children()
 
     opts = [strategy: :one_for_one, name: Sonar.Supervisor]
     Supervisor.start_link(children, opts)
@@ -46,6 +50,14 @@ defmodule Sonar.Application do
       configured ->
         configured == true
     end
+  end
+
+  # Peer liveness runs regardless of discovery: it is also what bootstraps
+  # Erlang distribution to manual peers (Relay.connect_peer needs the node
+  # name from /api/health). Off in test, where it would hit the DB outside
+  # the SQL Sandbox.
+  defp peer_health_children do
+    if Application.get_env(:sonar, :peer_health_enabled, true), do: [Sonar.PeerHealth], else: []
   end
 
   defp discovery_children do

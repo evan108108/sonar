@@ -9,5 +9,6 @@ defmodule SonarWeb.HealthControllerTest do
     assert body["app"] == "sonar"
     assert body["version"] == "0.1.0"
     assert is_binary(body["node"])
+    assert is_integer(body["port"])
   end
 end
