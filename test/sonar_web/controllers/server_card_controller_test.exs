@@ -22,9 +22,11 @@ defmodule SonarWeb.ServerCardControllerTest do
 
     assert is_map(body["transport"])
     assert body["transport"]["type"] == "http"
-    assert is_binary(body["transport"]["endpoint"])
     assert is_integer(body["transport"]["port"])
-    assert String.ends_with?(body["transport"]["endpoint"], ":#{body["transport"]["port"]}")
+    # `endpoint` is either a string URL (when SONAR_PUBLIC_HOST is set) or
+    # nil (when it isn't). Both are valid shapes — see the dedicated tests
+    # below for the behavior of each.
+    assert is_binary(body["transport"]["endpoint"]) or is_nil(body["transport"]["endpoint"])
 
     assert is_map(body["authentication"])
     assert body["authentication"]["type"] == "bearer"
@@ -69,23 +71,22 @@ defmodule SonarWeb.ServerCardControllerTest do
                "http://evans-macbook-pro.tail079090.ts.net:#{port}"
     end
 
-    test "empty SONAR_PUBLIC_HOST falls back to conn.host", %{conn: conn} do
+    test "empty SONAR_PUBLIC_HOST yields nil endpoint", %{conn: conn} do
       System.put_env("SONAR_PUBLIC_HOST", "")
       conn = get(conn, "/.well-known/sonar/card.json")
       body = json_response(conn, 200)
-      port = body["transport"]["port"]
 
-      refute String.starts_with?(body["transport"]["endpoint"], "http://:")
-      assert String.ends_with?(body["transport"]["endpoint"], ":#{port}")
+      assert is_nil(body["transport"]["endpoint"])
+      assert is_integer(body["transport"]["port"])
     end
 
-    test "unset SONAR_PUBLIC_HOST falls back to conn.host", %{conn: conn} do
+    test "unset SONAR_PUBLIC_HOST yields nil endpoint", %{conn: conn} do
       System.delete_env("SONAR_PUBLIC_HOST")
       conn = get(conn, "/.well-known/sonar/card.json")
       body = json_response(conn, 200)
-      port = body["transport"]["port"]
 
-      assert String.ends_with?(body["transport"]["endpoint"], ":#{port}")
+      assert is_nil(body["transport"]["endpoint"])
+      assert is_integer(body["transport"]["port"])
     end
   end
 end

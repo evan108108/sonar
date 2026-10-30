@@ -3,6 +3,7 @@ defmodule SonarWeb.ServerCardController do
 
   def show(conn, _params) do
     identity = Sonar.Identity.get()
+    port = Sonar.PortFile.bound_port()
 
     card = %{
       version: "1.0",
@@ -15,8 +16,8 @@ defmodule SonarWeb.ServerCardController do
       capabilities: identity.capabilities,
       transport: %{
         type: "http",
-        endpoint: endpoint_url(conn),
-        port: Sonar.PortFile.bound_port()
+        endpoint: endpoint_url(port),
+        port: port
       },
       authentication: %{
         type: "bearer",
@@ -29,20 +30,18 @@ defmodule SonarWeb.ServerCardController do
     |> json(card)
   end
 
-  # Advertise where remote peers should reach us. SONAR_PUBLIC_HOST (e.g. a
-  # Tailscale hostname or public DNS name) wins when set — the host the
-  # caller used may be LAN-only or a loopback name that doesn't route from
-  # other networks. Falls back to conn.host, which at least matches however
-  # the current caller got here. SonarWeb.Endpoint.url/0 (config host
-  # "localhost") is useless to a remote peer, so we never use it.
-  defp endpoint_url(conn) do
-    host =
-      case System.get_env("SONAR_PUBLIC_HOST") do
-        nil -> conn.host
-        "" -> conn.host
-        public -> public
-      end
-
-    "http://#{host}:#{Sonar.PortFile.bound_port()}"
+  # Advertise where remote peers should reach us. SONAR_PUBLIC_HOST is the
+  # one knob — set it to whatever hostname actually routes to this instance
+  # for the peers that will see this card (a Tailscale name, a public DNS
+  # name, a LAN hostname, etc.). When it's unset we have no honest answer,
+  # so `endpoint` is null rather than a fabricated URL built from whatever
+  # host the current caller happened to use (which may be loopback or
+  # LAN-only and useless to the next peer who reads the card).
+  defp endpoint_url(port) do
+    case System.get_env("SONAR_PUBLIC_HOST") do
+      nil -> nil
+      "" -> nil
+      public -> "http://#{public}:#{port}"
+    end
   end
 end
