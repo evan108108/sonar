@@ -6,6 +6,11 @@ defmodule Sonar.Schema.Message do
 
   @session_id_format ~r/\A[A-Za-z0-9_-]{1,128}\z/
 
+  # target_session_id can be a sidebar label like "Session 3": the receiving Sonata
+  # resolves it through DMTargetResolver, so labels and exact session keys both route.
+  # Any printable text up to 128 characters; control characters are still rejected.
+  @target_session_format ~r/\A[^\p{Cc}]{1,128}\z/u
+
   schema "messages" do
     field(:direction, :string, default: "inbound")
     field(:question, :string)
@@ -46,16 +51,16 @@ defmodule Sonar.Schema.Message do
     |> validate_required([:id, :question])
     |> validate_inclusion(:direction, ~w(inbound outbound))
     |> validate_inclusion(:status, ~w(pending processing answered declined expired relayed failed))
-    |> validate_optional_session_id(:target_session_id)
-    |> validate_optional_session_id(:from_session_id)
+    |> validate_optional_session_id(:target_session_id, @target_session_format)
+    |> validate_optional_session_id(:from_session_id, @session_id_format)
   end
 
   # Only validate format when the field is present — nil/missing passes.
-  defp validate_optional_session_id(changeset, field) do
+  defp validate_optional_session_id(changeset, field, format) do
     validate_change(changeset, field, fn ^field, value ->
       cond do
         is_nil(value) -> []
-        is_binary(value) and Regex.match?(@session_id_format, value) -> []
+        is_binary(value) and Regex.match?(format, value) -> []
         true -> [{field, "has invalid format"}]
       end
     end)

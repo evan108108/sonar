@@ -134,16 +134,44 @@ defmodule Sonar.MessagesDMTest do
       assert cs2.valid?
     end
 
-    test "rejects malformed target_session_id" do
+    test "accepts a sidebar label as target_session_id" do
+      # Control: an exact session key still passes.
+      for target <- ["session-2e246c6d406e4deb", "Session 3", "Scout"] do
+        cs =
+          Message.changeset(%Message{}, %{
+            "id" => "abc",
+            "question" => "q",
+            "target_session_id" => target
+          })
+
+        assert cs.valid?, "expected #{inspect(target)} to be a valid target_session_id"
+      end
+    end
+
+    test "rejects target_session_id with control characters or over 128 chars" do
+      for target <- ["Session\n3", "tab\there", String.duplicate("a", 129)] do
+        cs =
+          Message.changeset(%Message{}, %{
+            "id" => "abc",
+            "question" => "q",
+            "target_session_id" => target
+          })
+
+        refute cs.valid?
+        assert Keyword.has_key?(cs.errors, :target_session_id)
+      end
+    end
+
+    test "from_session_id keeps the strict key format" do
       cs =
         Message.changeset(%Message{}, %{
           "id" => "abc",
           "question" => "q",
-          "target_session_id" => "bad id with spaces"
+          "from_session_id" => "bad id with spaces"
         })
 
       refute cs.valid?
-      assert Keyword.has_key?(cs.errors, :target_session_id)
+      assert Keyword.has_key?(cs.errors, :from_session_id)
     end
 
     test "rejects malformed from_session_id" do
