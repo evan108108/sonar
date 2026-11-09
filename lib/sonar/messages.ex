@@ -89,7 +89,7 @@ defmodule Sonar.Messages do
     case result do
       {:ok, updated} ->
         maybe_relay_response(updated)
-        SonarWeb.Endpoint.broadcast("messages:events", "reply_sent", %{message_id: updated.id, answer: answer})
+        SonarWeb.Events.emit("reply_sent", %{message_id: updated.id, answer: answer})
         {:ok, updated}
 
       error ->

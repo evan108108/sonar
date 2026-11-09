@@ -97,8 +97,7 @@ defmodule SonarWeb.MessagesController do
 
         case Messages.receive_message(attrs) do
           {:ok, msg} ->
-            SonarWeb.Endpoint.broadcast(
-              "messages:events",
+            SonarWeb.Events.emit(
               "new_message",
               Messages.new_message_event(msg, peer, from_instance_id, message_attrs)
             )
@@ -133,7 +132,7 @@ defmodule SonarWeb.MessagesController do
       _message ->
         case Messages.update_answer(message_id, answer) do
           {:ok, _updated} ->
-            SonarWeb.Endpoint.broadcast("messages:events", "reply_received", %{message_id: message_id, answer: answer})
+            SonarWeb.Events.emit("reply_received", %{message_id: message_id, answer: answer})
             json(conn, %{ok: true})
 
           {:error, reason} ->
@@ -169,7 +168,7 @@ defmodule SonarWeb.MessagesController do
       peer -> touch_peer_liveness(peer, params["from_port"])
     end
 
-    SonarWeb.Endpoint.broadcast("messages:events", "ack_forward", %{
+    SonarWeb.Events.emit("ack_forward", %{
       message_id: message_id,
       acked_at_ms: ack["acked_at_ms"]
     })
