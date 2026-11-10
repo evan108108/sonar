@@ -58,8 +58,7 @@ defmodule Sonar.Relay.MessageHandler do
           case Sonar.Messages.receive_message(attrs) do
             {:ok, msg} ->
               Logger.info("Sonar Relay: stored inbound message #{msg.id} from #{peer.name}")
-              SonarWeb.Endpoint.broadcast(
-                "messages:events",
+              SonarWeb.Events.emit(
                 "new_message",
                 Sonar.Messages.new_message_event(msg, peer, from_instance_id, message_attrs)
               )
@@ -104,7 +103,7 @@ defmodule Sonar.Relay.MessageHandler do
         # MessagesController.receive_response.
         case Sonar.Messages.update_answer(message.id, answer) do
           {:ok, _updated} ->
-            SonarWeb.Endpoint.broadcast("messages:events", "reply_received", %{message_id: message_id, from_peer: from_instance_id, answer: answer})
+            SonarWeb.Events.emit("reply_received", %{message_id: message_id, from_peer: from_instance_id, answer: answer})
           {:error, _} -> :ok
         end
     end
@@ -117,7 +116,7 @@ defmodule Sonar.Relay.MessageHandler do
   def handle_cast({:sonar_ack, from_instance_id, ack_attrs}, state) do
     Logger.info("Sonar Relay: received ack_forward from #{from_instance_id}")
 
-    SonarWeb.Endpoint.broadcast("messages:events", "ack_forward", %{
+    SonarWeb.Events.emit("ack_forward", %{
       message_id: ack_attrs["message_id"],
       acked_at_ms: ack_attrs["acked_at_ms"]
     })
